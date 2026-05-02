@@ -135,6 +135,7 @@ function showScreen(id) {
 // back button can walk back through screens.
 function gotoScreen(target, { replace = false } = {}) {
     if (STATE.screen === 'playing' && target !== 'playing') teardownGame();
+    if (STATE.screen === 'stadium' && target !== 'stadium') STADIUM_PREVIEW?.detach();
     STATE.screen = target;
     showScreen(SCREEN_TO_DOM[target] || (target + '-screen'));
     const stateObj = { screen: target };
@@ -145,6 +146,7 @@ function gotoScreen(target, { replace = false } = {}) {
 
 function navigateToFromPopState(target) {
     if (STATE.screen === 'playing' && target !== 'playing') teardownGame();
+    if (STATE.screen === 'stadium' && target !== 'stadium') STADIUM_PREVIEW?.detach();
     STATE.screen = target;
     showScreen(SCREEN_TO_DOM[target] || (target + '-screen'));
 }
@@ -241,10 +243,12 @@ function openStadiumPicker() {
     const sel = getSelectedStadium();
     stadiumPickerIdx = STADIUMS.findIndex(s => s.id === sel.id);
     if (stadiumPickerIdx < 0) stadiumPickerIdx = 0;
+    // Show the screen first so the card has real dimensions when the 3D viewer
+    // measures itself; otherwise getBoundingClientRect would return 0×0.
+    gotoScreen('stadium');
     renderStadiumCard(stadiumPickerIdx, 0);
     renderStadiumDots();
     refreshStadiumArrows();
-    gotoScreen('stadium');
 }
 
 function navigateStadium(delta) {
@@ -287,17 +291,32 @@ function renderStadiumCard(idx, dir) {
     const stadium = STADIUMS[idx];
     const selectedId = getSelectedStadium().id;
     const isCurrent  = stadium.id === selectedId;
+    const hasModel   = !!stadium.file && typeof THREE.GLTFLoader === 'function';
 
     card.style.setProperty('--accent-card', stadium.accent);
     card.dataset.silhouette = stadium.silhouette || 'bowl';
     card.classList.toggle('is-selected', isCurrent);
+
+    // The art slot either hosts the live 3D viewer (preferred when a .glb is
+    // available) or the flat silhouette as a graceful fallback.
+    const artInner = hasModel
+        ? `<div class="stadium-card__viewer" data-stadium="${stadium.id}">
+               <div class="stadium-card__viewer-fallback">${stadiumSilhouetteSVG(stadium)}</div>
+               <div class="stadium-card__viewer-hint" aria-hidden="true">
+                   <span class="dot"></span><span>Sleep om te draaien · scroll om te zoomen</span>
+               </div>
+               <div class="stadium-card__viewer-loading" aria-hidden="true">
+                   <span class="spinner"></span><span>Stadion laden…</span>
+               </div>
+           </div>`
+        : stadiumSilhouetteSVG(stadium);
 
     card.innerHTML = `
         <div class="stadium-card__chrome">
             <span class="stadium-card__tag">${isCurrent ? 'GESELECTEERD' : 'OPTIE'}</span>
             <span class="stadium-card__num tabular">${String(idx+1).padStart(2,'0')} / ${String(STADIUMS.length).padStart(2,'0')}</span>
         </div>
-        <div class="stadium-card__art">${stadiumSilhouetteSVG(stadium)}</div>
+        <div class="stadium-card__art">${artInner}</div>
         <div class="stadium-card__sub">${stadium.sub}</div>
         <h3 class="stadium-card__name">${stadium.name}</h3>
         <p class="stadium-card__tagline">${stadium.tagline}</p>
@@ -313,7 +332,255 @@ function renderStadiumCard(idx, dir) {
     void card.offsetWidth;
     if (dir > 0)      card.classList.add('slide-from-right');
     else if (dir < 0) card.classList.add('slide-from-left');
+
+    // mount or swap the 3D preview into the freshly-rendered viewer slot
+    if (hasModel) {
+        const slot = card.querySelector('.stadium-card__viewer');
+        if (slot) STADIUM_PREVIEW.show(stadium, slot);
+    } else {
+        STADIUM_PREVIEW.detach();
+    }
 }
+
+// ----------- stadium picker preview (live .glb viewer) -----------
+// Renders the selected stadium's .glb inside the picker card with
+// drag-to-rotate (OrbitControls), idle auto-rotate, and per-stadium model
+// caching. One persistent renderer is reused across cards to avoid
+// re-allocating a WebGL context every navigation.
+const STADIUM_PREVIEW = (() => {
+    let renderer, scene, camera, controls;
+    let raf = 0;
+    let host = null;            // current viewer slot in the DOM
+    let currentId = null;       // id of stadium currently in the scene
+    let model = null;           // active THREE.Object3D
+    let resizeObs = null;
+    const cache = new Map();    // stadium.id -> prepared THREE.Object3D
+    const inflight = new Map(); // stadium.id -> Promise (avoid double-fetch)
+    let autoRotateResumeT = 0;
+
+    function ensureRenderer() {
+        if (renderer) return;
+        if (typeof THREE.OrbitControls !== 'function') {
+            console.warn('OrbitControls missing — stadium preview disabled');
+            return;
+        }
+        renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.05;
+        renderer.domElement.classList.add('stadium-card__viewer-canvas');
+
+        scene = new THREE.Scene();
+
+        // soft night-stadium lighting — hemi for ambient + key + fill
+        scene.add(new THREE.HemisphereLight(0xfff1d6, 0x0a1612, 0.85));
+        const key = new THREE.DirectionalLight(0xffffff, 1.1);
+        key.position.set(180, 240, 140);
+        scene.add(key);
+        const fill = new THREE.DirectionalLight(0x88e5ff, 0.35);
+        fill.position.set(-180, 90, -140);
+        scene.add(fill);
+
+        camera = new THREE.PerspectiveCamera(36, 1, 0.5, 8000);
+        camera.position.set(0, 80, 220);
+
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.085;
+        controls.enablePan = false;
+        controls.rotateSpeed = 0.85;
+        controls.zoomSpeed = 0.7;
+        controls.minPolarAngle = Math.PI * 0.18;
+        controls.maxPolarAngle = Math.PI * 0.495; // never below ground
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 0.55;
+
+        // pause auto-rotate while the user is interacting; resume after a beat
+        controls.addEventListener('start', () => {
+            controls.autoRotate = false;
+            host?.classList.add('is-grabbing');
+        });
+        controls.addEventListener('end', () => {
+            host?.classList.remove('is-grabbing');
+            clearTimeout(autoRotateResumeT);
+            autoRotateResumeT = setTimeout(() => { controls.autoRotate = true; }, 3500);
+        });
+    }
+
+    function loop() {
+        raf = 0;
+        if (!renderer || !host) return;
+        controls.update();
+        renderer.render(scene, camera);
+        raf = requestAnimationFrame(loop);
+    }
+
+    function resize() {
+        if (!renderer || !host) return;
+        const r = host.getBoundingClientRect();
+        // host can be 0×0 momentarily if the picker screen is in the middle of
+        // unhiding — ResizeObserver will fire again with real dims, so just
+        // bail rather than configuring a zero-sized framebuffer.
+        if (r.width < 1 || r.height < 1) return;
+        const w = Math.max(1, Math.floor(r.width));
+        const h = Math.max(1, Math.floor(r.height));
+        renderer.setSize(w, h, false);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+    }
+
+    function frameModel(obj) {
+        const bbox = new THREE.Box3().setFromObject(obj);
+        if (bbox.isEmpty()) {
+            console.warn('stadium preview: bbox empty', obj);
+            return;
+        }
+        const size   = bbox.getSize(new THREE.Vector3());
+        const center = bbox.getCenter(new THREE.Vector3());
+        // sphere that contains the whole model — robust regardless of which
+        // axis is longest (stadiums are flat & wide; the in-game camera is
+        // close to the ground, so naive "longest axis" framing put us above
+        // the bowl looking straight down at empty grass)
+        const radius = Math.max(size.length() * 0.5, 1);
+
+        const halfFovV = (camera.fov * Math.PI / 180) * 0.5;
+        const halfFovH = Math.atan(Math.tan(halfFovV) * Math.max(0.1, camera.aspect));
+        const halfFov  = Math.min(halfFovV, halfFovH);
+        const dist     = radius / Math.sin(halfFov) * 1.15;
+
+        // pick a flattering "stadium tour" angle: ~22° elevation, ~32° azimuth
+        const elev = Math.PI * 0.12;
+        const azim = Math.PI * 0.18;
+        const off  = new THREE.Vector3(
+            Math.sin(azim) * Math.cos(elev),
+            Math.sin(elev),
+            Math.cos(azim) * Math.cos(elev),
+        ).multiplyScalar(dist);
+
+        controls.target.copy(center);
+        camera.position.copy(center).add(off);
+
+        // adapt clipping to the model's scale so we can't accidentally clip
+        // tiny models (mm-scale exports) or huge ones (km-scale exports)
+        camera.near = Math.max(0.05, dist * 0.005);
+        camera.far  = dist * 60;
+        camera.updateProjectionMatrix();
+
+        controls.minDistance = radius * 0.9;
+        controls.maxDistance = radius * 4.5;
+        controls.update();
+    }
+
+    function prepareModel(gltf, stadium) {
+        const obj = gltf.scene;
+        obj.rotation.y = stadium.rotateY ?? 0;
+
+        // The catalog's colorScale exists to blend stadiums into the night-time
+        // gameplay scene; in the picker we want them to look vivid, so we skip
+        // it and only damp absurd metalness / emissive bakes.
+        obj.traverse((c) => {
+            if (!c.isMesh) return;
+            c.castShadow = false;
+            c.receiveShadow = false;
+            const mats = Array.isArray(c.material) ? c.material : (c.material ? [c.material] : []);
+            mats.forEach(m => {
+                if (m.emissive && m.emissiveIntensity > 1) m.emissiveIntensity = 0.55;
+                if (m.metalness !== undefined) m.metalness = Math.min(0.5, m.metalness);
+            });
+        });
+        return obj;
+    }
+
+    function loadStadium(stadium) {
+        if (cache.has(stadium.id)) return Promise.resolve(cache.get(stadium.id));
+        if (inflight.has(stadium.id)) return inflight.get(stadium.id);
+        const p = new Promise((resolve, reject) => {
+            const loader = new THREE.GLTFLoader();
+            loader.load(stadium.file,
+                (gltf) => { const o = prepareModel(gltf, stadium); cache.set(stadium.id, o); resolve(o); },
+                undefined,
+                (err) => reject(err)
+            );
+        });
+        inflight.set(stadium.id, p);
+        p.finally(() => inflight.delete(stadium.id));
+        return p;
+    }
+
+    function setModel(obj) {
+        if (model && model !== obj) scene.remove(model);
+        model = obj;
+        if (!scene.children.includes(model)) scene.add(model);
+        frameModel(model);
+        const b = new THREE.Box3().setFromObject(obj);
+        const s = b.getSize(new THREE.Vector3());
+        console.log('[stadium-preview] model size', s, 'center', b.getCenter(new THREE.Vector3()),
+                    'cam', camera.position.toArray(), 'target', controls.target.toArray());
+    }
+
+    function show(stadium, slot) {
+        ensureRenderer();
+        if (!renderer) {
+            // OrbitControls / WebGL unavailable — leave the silhouette visible
+            slot.classList.add('is-unsupported');
+            return;
+        }
+
+        // attach the persistent canvas into the new card slot
+        if (host !== slot) {
+            host = slot;
+            if (renderer.domElement.parentNode !== slot) {
+                slot.appendChild(renderer.domElement);
+            }
+            if (resizeObs) resizeObs.disconnect();
+            resizeObs = new ResizeObserver(resize);
+            resizeObs.observe(slot);
+        }
+        resize();
+
+        // swap models if the stadium changed
+        if (currentId !== stadium.id) {
+            currentId = stadium.id;
+            slot.classList.add('is-loading');
+            slot.classList.remove('is-ready');
+            if (model) { scene.remove(model); model = null; }
+
+            loadStadium(stadium)
+                .then((obj) => {
+                    if (currentId !== stadium.id) return; // user already moved on
+                    setModel(obj);
+                    slot.classList.remove('is-loading');
+                    slot.classList.add('is-ready');
+                })
+                .catch((err) => {
+                    console.warn(`stadium preview "${stadium.id}" failed to load`, err);
+                    slot.classList.remove('is-loading');
+                    slot.classList.add('is-failed');
+                });
+        } else if (model) {
+            // same stadium re-mounted (after card re-render) — just reframe
+            if (!scene.children.includes(model)) scene.add(model);
+            slot.classList.add('is-ready');
+        }
+
+        // restart the render loop now that we have a host again
+        if (!raf) raf = requestAnimationFrame(loop);
+    }
+
+    function detach() {
+        // stop rendering & let the canvas live off-DOM until next mount
+        if (raf) { cancelAnimationFrame(raf); raf = 0; }
+        if (resizeObs) { resizeObs.disconnect(); resizeObs = null; }
+        clearTimeout(autoRotateResumeT);
+        if (renderer && renderer.domElement.parentNode) {
+            renderer.domElement.parentNode.removeChild(renderer.domElement);
+        }
+        host = null;
+    }
+
+    return { show, detach };
+})();
 
 function stadiumSilhouetteSVG(stadium) {
     const acc = stadium.accent;
