@@ -6,7 +6,7 @@
     <title>PITCH ROYALE — Lokale Aftrap</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Fraunces:ital,opsz,wght@1,9..144,500;1,9..144,700;1,9..144,900&family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -427,39 +427,158 @@
         </div>
     </div>
 
-    <!-- ============ STADIUM PICKER ============ -->
+    <!-- ============ STADIUM PICKER — Director's Cut broadside ============ -->
     <div id="stadium-screen" class="screen">
-        <div class="stadium-stage">
-            <div class="stadium-header">
-                <span class="crumb">★ / KIES JE ARENA</span>
-                <h2 class="stadium-title">Kies je <em>stadion</em></h2>
-                <p class="stadium-sub">Waar zal de wedstrijd vanavond plaatsvinden?</p>
-            </div>
+        <!-- giant background wordmark, sits behind everything -->
+        <div class="stadium-wordmark" aria-hidden="true">
+            <span>STADIA</span><span class="stadium-wordmark__div">·</span><span>2026</span>
+        </div>
+        <!-- ambient floodlight tinted by the active stadium accent -->
+        <div class="stadium-flood" aria-hidden="true"></div>
 
-            <div class="stadium-slider">
-                <button id="stadium-prev" class="stadium-arrow stadium-arrow--prev" aria-label="Vorig stadion">
-                    <span aria-hidden="true">◀</span>
+        <div class="stadium-stage" aria-live="polite">
+            <!-- topline hairline ruler -->
+            <header class="stadium-topline">
+                <span class="stadium-topline__crumb">
+                    <span class="stadium-topline__star">✦</span>
+                    Sectie&nbsp;06 · Kies je arena
+                </span>
+                <span class="stadium-topline__rule"></span>
+                <span class="stadium-topline__page tabular">
+                    <span id="stadium-page">02</span>
+                    <span class="dim">/</span>
+                    <span id="stadium-pagetotal">02</span>
+                </span>
+                <span class="stadium-topline__rule stadium-topline__rule--short"></span>
+                <span class="stadium-topline__date tabular">MATCHDAY · DAGBOEK 2026</span>
+            </header>
+
+            <!-- editorial broadside: viewer + dossier -->
+            <main class="stadium-broadside">
+                <!-- LEFT: cinematic 3D viewer -->
+                <section class="stadium-viewport">
+                    <div class="stadium-viewport__brackets" aria-hidden="true">
+                        <span class="b tl"></span><span class="b tr"></span>
+                        <span class="b bl"></span><span class="b br"></span>
+                    </div>
+
+                    <div class="stadium-viewport__chrome stadium-viewport__chrome--tl">
+                        <span class="rec-dot" aria-hidden="true"></span>
+                        <span>REC · LIVE FEED</span>
+                    </div>
+                    <div class="stadium-viewport__chrome stadium-viewport__chrome--tr">
+                        FRAME · CAM&nbsp;<span class="tabular" id="stadium-cam">02</span>
+                    </div>
+                    <div class="stadium-viewport__chrome stadium-viewport__chrome--bl tabular" id="stadium-tc">
+                        00:00:00:00
+                    </div>
+                    <div class="stadium-viewport__chrome stadium-viewport__chrome--br">
+                        <span class="dot" aria-hidden="true"></span>
+                        Sleep · Zoom · Draai
+                    </div>
+
+                    <article id="stadium-card" class="stadium-card">
+                        <!-- 3D viewer mounted here by STADIUM_PREVIEW.show -->
+                    </article>
+
+                    <!-- footer ruler under the viewer -->
+                    <div class="stadium-viewport__rule" aria-hidden="true">
+                        <span class="tick" style="--p:0%"></span>
+                        <span class="tick" style="--p:25%"></span>
+                        <span class="tick" style="--p:50%"></span>
+                        <span class="tick" style="--p:75%"></span>
+                        <span class="tick" style="--p:100%"></span>
+                    </div>
+                </section>
+
+                <!-- RIGHT: dossier sidebar -->
+                <aside class="stadium-dossier">
+                    <div class="stadium-dossier__top">
+                        <span class="stadium-dossier__numlbl">N°</span>
+                        <span class="stadium-dossier__num tabular" id="stadium-num">02</span>
+                        <span class="stadium-dossier__hairline"></span>
+                        <span class="stadium-dossier__code tabular" id="stadium-code">CMPNOU</span>
+                    </div>
+
+                    <div class="stadium-dossier__sub" id="stadium-sub">AWAY · BLAUGRANA</div>
+
+                    <h2 class="stadium-dossier__name" id="stadium-name" aria-live="polite">
+                        <span class="stadium-dossier__namewrap">CAMP NOU</span>
+                    </h2>
+
+                    <p class="stadium-dossier__tagline" id="stadium-tagline">
+                        <em>"Honderdduizend zielen, één gezang."</em>
+                    </p>
+
+                    <div class="stadium-dossier__chips" id="stadium-chips">
+                        <!-- chips populated by JS -->
+                    </div>
+
+                    <dl class="stadium-stats">
+                        <div>
+                            <dt>Capaciteit</dt>
+                            <span class="lead" aria-hidden="true"></span>
+                            <dd id="stadium-stat-cap" class="tabular">99.354</dd>
+                        </div>
+                        <div>
+                            <dt>Sfeer</dt>
+                            <span class="lead" aria-hidden="true"></span>
+                            <dd id="stadium-stat-mood">AVOND</dd>
+                        </div>
+                        <div>
+                            <dt>Type</dt>
+                            <span class="lead" aria-hidden="true"></span>
+                            <dd id="stadium-stat-type">BOWL</dd>
+                        </div>
+                        <div>
+                            <dt>Status</dt>
+                            <span class="lead" aria-hidden="true"></span>
+                            <dd id="stadium-stat-status">OPTIE</dd>
+                        </div>
+                    </dl>
+
+                    <div class="stadium-dossier__pulse" aria-hidden="true">
+                        <span class="stadium-dossier__pulse-track">
+                            <span class="stadium-dossier__pulse-fill" id="stadium-pulse-fill" style="--pct:78%"></span>
+                        </span>
+                        <span class="stadium-dossier__pulse-lbl">
+                            <span>Verwachte bezetting</span>
+                            <span class="tabular" id="stadium-pulse-pct">78%</span>
+                        </span>
+                    </div>
+                </aside>
+            </main>
+
+            <!-- footer nav: prev / dots / next -->
+            <footer class="stadium-footnav">
+                <button id="stadium-prev" class="stadium-nav stadium-nav--prev" aria-label="Vorig stadion">
+                    <span class="stadium-nav__arrow" aria-hidden="true">◀</span>
+                    <span class="stadium-nav__col">
+                        <span class="stadium-nav__lbl">Vorig</span>
+                        <span class="stadium-nav__sub" id="stadium-nav-prev-name">—</span>
+                    </span>
                 </button>
 
-                <article id="stadium-card" class="stadium-card" aria-live="polite">
-                    <!-- populated by JS in renderStadiumCard -->
-                </article>
+                <div id="stadium-dots" class="stadium-dots" role="tablist" aria-label="Stadions"></div>
 
-                <button id="stadium-next" class="stadium-arrow stadium-arrow--next" aria-label="Volgend stadion">
-                    <span aria-hidden="true">▶</span>
+                <button id="stadium-next" class="stadium-nav stadium-nav--next" aria-label="Volgend stadion">
+                    <span class="stadium-nav__col stadium-nav__col--right">
+                        <span class="stadium-nav__lbl">Volgend</span>
+                        <span class="stadium-nav__sub" id="stadium-nav-next-name">—</span>
+                    </span>
+                    <span class="stadium-nav__arrow" aria-hidden="true">▶</span>
                 </button>
-            </div>
+            </footer>
 
-            <div id="stadium-dots" class="stadium-dots" role="tablist" aria-label="Stadions"></div>
-
+            <!-- actions row -->
             <div class="stadium-actions">
+                <button id="stadium-back" class="ghost-btn">← Terug</button>
                 <button id="stadium-confirm" class="cta-button cta-button--gold">
                     <span class="cta-button__inner">
                         <span class="cta-button__label">Bevestig stadion</span>
                         <span class="cta-button__arrow">→</span>
                     </span>
                 </button>
-                <button id="stadium-back" class="ghost-btn">Terug</button>
             </div>
 
             <div class="stadium-keyhints">

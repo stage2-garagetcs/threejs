@@ -1763,188 +1763,275 @@ kbd {
 }
 
 /* =====================================================
-   06 · STADIUM PICKER
-   ===================================================== */
+   06 · STADIUM PICKER — Director's Cut broadside
+   =====================================================
+   Editorial matchday-programme spread: cinematic 3D viewport on the left,
+   typographic dossier on the right, set on a deep ink-pitch field with a
+   floodlight that takes its colour from the active stadium accent.
+   Display: Anton (existing). Editorial italic: Fraunces. Mono: JetBrains.
+*/
 #stadium-screen {
+    --accent-card: var(--accent);
     background:
-        radial-gradient(ellipse 80% 50% at 50% 0%, rgba(34,197,94,0.10), transparent 60%),
-        radial-gradient(ellipse 60% 40% at 50% 100%, rgba(0,0,0,0.7), transparent 60%),
-        linear-gradient(180deg, #0a1f14 0%, #02110a 60%, #010705 100%),
+        radial-gradient(ellipse 70% 60% at 100% 0%,
+            color-mix(in srgb, var(--accent-card) 14%, transparent), transparent 55%),
+        radial-gradient(ellipse 50% 50% at 0% 100%,
+            color-mix(in srgb, var(--accent-card) 8%, transparent), transparent 60%),
+        radial-gradient(ellipse 60% 40% at 50% 100%, rgba(0,0,0,0.85), transparent 70%),
+        linear-gradient(180deg, #050d09 0%, #02110a 50%, #000503 100%),
         var(--chalk-pattern);
-    background-blend-mode: normal, normal, normal, soft-light;
+    background-blend-mode: screen, screen, normal, normal, soft-light;
+    background-attachment: fixed;
     overflow: auto;
+    transition: background 0.6s ease;
 }
 #stadium-screen.active {
-    display: grid;
-    place-items: center;
-    padding: 3rem 1.5rem;
+    display: block;
+    padding: clamp(1.4rem, 3vw, 3rem) clamp(1.2rem, 4vw, 4rem);
 }
 
+/* giant background wordmark, fixed, behind everything ---- */
+.stadium-wordmark {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.18em;
+    font-family: var(--f-display);
+    font-size: clamp(14rem, 36vw, 36rem);
+    line-height: 0.85;
+    color: transparent;
+    -webkit-text-stroke: 1px rgba(243, 239, 226, 0.045);
+    transform: rotate(-7deg);
+    pointer-events: none;
+    user-select: none;
+    overflow: hidden;
+    white-space: nowrap;
+    z-index: 0;
+    animation: stadium-wordmark-drift 22s ease-in-out infinite alternate;
+}
+.stadium-wordmark__div {
+    color: transparent;
+    -webkit-text-stroke: 1px color-mix(in srgb, var(--accent-card) 60%, transparent);
+    font-size: 0.7em;
+}
+@keyframes stadium-wordmark-drift {
+    from { transform: rotate(-7deg) translate3d(-1.5%, -0.8%, 0); }
+    to   { transform: rotate(-7deg) translate3d(1.5%, 0.8%, 0); }
+}
+
+/* ambient floodlight, accent-coloured ------------------- */
+.stadium-flood {
+    position: fixed;
+    inset: -10vh -10vw -10vh auto;
+    width: 75vw;
+    pointer-events: none;
+    z-index: 0;
+    background: radial-gradient(circle at 65% 20%,
+        color-mix(in srgb, var(--accent-card) 28%, transparent) 0%,
+        color-mix(in srgb, var(--accent-card) 8%, transparent) 22%,
+        transparent 55%);
+    filter: blur(8px);
+    transition: background 0.6s ease;
+    animation: stadium-flood-pulse 9s ease-in-out infinite alternate;
+}
+@keyframes stadium-flood-pulse {
+    from { opacity: 0.78; }
+    to   { opacity: 1; }
+}
+
+/* stage container --------------------------------------- */
 .stadium-stage {
-    width: min(1100px, 100%);
+    position: relative;
+    z-index: 1;
+    width: min(1280px, 100%);
+    margin: 0 auto;
     display: grid;
-    gap: 2rem;
-    justify-items: center;
-    text-align: center;
-    animation: stadium-fade 0.55s ease-out;
+    gap: clamp(1.4rem, 2.4vw, 2.4rem);
+    animation: stadium-fade 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 @keyframes stadium-fade {
-    from { opacity: 0; transform: translateY(12px); }
+    from { opacity: 0; transform: translateY(14px); }
     to   { opacity: 1; transform: translateY(0); }
 }
 
-.stadium-header { display: grid; gap: 0.5rem; max-width: 720px; }
-.stadium-title {
-    font-family: var(--f-display);
-    font-size: clamp(2.6rem, 5vw, 4.2rem);
-    margin: 0;
-    letter-spacing: 0.02em;
-    line-height: 0.95;
-    text-transform: uppercase;
-    color: var(--ink);
+/* directional broadside slide on stadium nav (subtle) */
+.stadium-stage.is-flipping-r .stadium-broadside { animation: broadside-r 0.45s ease-out; }
+.stadium-stage.is-flipping-l .stadium-broadside { animation: broadside-l 0.45s ease-out; }
+@keyframes broadside-r {
+    0%   { opacity: 0.6; transform: translateX(18px); }
+    100% { opacity: 1;   transform: translateX(0); }
 }
-.stadium-title em {
-    font-style: normal;
-    color: var(--accent);
-    text-shadow: 0 0 20px var(--accent-glow);
-}
-.stadium-sub {
-    margin: 0;
-    font-family: var(--f-body);
-    font-size: 1rem;
-    color: var(--ink-soft);
-    letter-spacing: 0.04em;
+@keyframes broadside-l {
+    0%   { opacity: 0.6; transform: translateX(-18px); }
+    100% { opacity: 1;   transform: translateX(0); }
 }
 
-/* slider row -------------------------------------------- */
-.stadium-slider {
+/* ============== TOPLINE RULER ========================= */
+.stadium-topline {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto 1fr auto auto auto;
     align-items: center;
-    gap: 1.2rem;
-    width: 100%;
-    max-width: 760px;
+    gap: 1rem;
+    padding-bottom: 0.8rem;
+    border-bottom: 1px solid rgba(243, 239, 226, 0.08);
+    font-family: var(--f-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
 }
-
-.stadium-arrow {
-    appearance: none;
-    width: 56px; height: 56px;
-    display: grid; place-items: center;
-    background: rgba(20, 62, 38, 0.55);
-    border: 1px solid rgba(243, 239, 226, 0.15);
-    border-radius: 50%;
+.stadium-topline__crumb {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6em;
+    color: var(--ink-soft);
+}
+.stadium-topline__star {
+    color: color-mix(in srgb, var(--accent-card) 80%, var(--ink));
+    font-size: 0.9em;
+}
+.stadium-topline__rule {
+    height: 1px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(243, 239, 226, 0.18) 30%,
+        rgba(243, 239, 226, 0.18) 70%,
+        transparent 100%);
+}
+.stadium-topline__rule--short { width: 56px; }
+.stadium-topline__page {
+    font-family: var(--f-display);
+    font-size: 1.3rem;
+    letter-spacing: 0.06em;
     color: var(--ink);
-    font-size: 1.1rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    backdrop-filter: blur(6px);
 }
-.stadium-arrow:hover:not(:disabled) {
-    background: rgba(34, 197, 94, 0.18);
-    border-color: var(--accent);
-    color: var(--accent-hot);
-    transform: scale(1.06);
-    box-shadow: 0 0 24px var(--accent-glow);
+.stadium-topline__page .dim {
+    color: var(--ink-mute);
+    margin: 0 0.2em;
 }
-.stadium-arrow:disabled { opacity: 0.25; cursor: not-allowed; }
-.stadium-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
-/* card -------------------------------------------------- */
-.stadium-card {
+/* ============== BROADSIDE GRID ======================== */
+.stadium-broadside {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+    gap: clamp(1.4rem, 3vw, 3rem);
+    align-items: stretch;
+}
+
+/* ============== VIEWPORT (left) ======================= */
+.stadium-viewport {
     --accent-card: var(--accent);
     position: relative;
-    width: 100%;
-    max-width: 480px;
-    justify-self: center;
-    padding: 1.6rem 1.6rem 1.8rem;
+    aspect-ratio: 16 / 11;
+    border-radius: 4px;
     background:
-        linear-gradient(180deg, rgba(20, 62, 38, 0.55) 0%, rgba(8, 20, 14, 0.85) 100%),
-        var(--chalk-pattern);
-    background-blend-mode: normal, soft-light;
-    border: 1px solid color-mix(in srgb, var(--accent-card) 32%, transparent);
-    border-radius: 14px;
+        radial-gradient(ellipse 80% 55% at 50% 0%, color-mix(in srgb, var(--accent-card) 12%, transparent), transparent 65%),
+        linear-gradient(180deg, #061812 0%, #020806 100%);
+    border: 1px solid rgba(243, 239, 226, 0.08);
     box-shadow:
-        0 18px 60px rgba(0,0,0,0.55),
-        0 0 0 1px rgba(0,0,0,0.3) inset,
-        0 0 36px color-mix(in srgb, var(--accent-card) 18%, transparent);
-    display: grid;
-    gap: 12px;
-    text-align: left;
+        0 30px 90px rgba(0,0,0,0.65),
+        0 0 0 1px rgba(0,0,0,0.4) inset,
+        0 0 80px color-mix(in srgb, var(--accent-card) 14%, transparent);
     overflow: hidden;
+    isolation: isolate;
 }
-.stadium-card::before {
-    content: '';
+
+/* corner brackets — film viewfinder */
+.stadium-viewport__brackets { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+.stadium-viewport__brackets .b {
     position: absolute;
-    inset: 0;
-    background:
-        radial-gradient(ellipse 80% 50% at 50% 0%, color-mix(in srgb, var(--accent-card) 22%, transparent), transparent 70%);
-    pointer-events: none;
+    width: 26px; height: 26px;
+    border: 1.5px solid color-mix(in srgb, var(--accent-card) 60%, var(--ink));
+    opacity: 0.85;
 }
-.stadium-card.is-selected {
-    border-color: var(--accent-card);
-    box-shadow:
-        0 22px 70px rgba(0,0,0,0.6),
-        0 0 0 1px rgba(0,0,0,0.3) inset,
-        0 0 50px color-mix(in srgb, var(--accent-card) 35%, transparent);
-}
+.stadium-viewport__brackets .b.tl { top: 14px; left: 14px;  border-right: 0; border-bottom: 0; }
+.stadium-viewport__brackets .b.tr { top: 14px; right: 14px; border-left: 0;  border-bottom: 0; }
+.stadium-viewport__brackets .b.bl { bottom: 14px; left: 14px;  border-right: 0; border-top: 0; }
+.stadium-viewport__brackets .b.br { bottom: 14px; right: 14px; border-left: 0;  border-top: 0; }
 
-.stadium-card__chrome {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+/* chrome labels (REC, frame, timecode, hint) */
+.stadium-viewport__chrome {
+    position: absolute;
+    z-index: 5;
+    padding: 6px 12px;
+    background: rgba(8, 18, 12, 0.55);
+    border: 1px solid rgba(243, 239, 226, 0.10);
+    border-radius: 999px;
+    backdrop-filter: blur(10px);
     font-family: var(--f-mono);
-    font-size: 0.7rem;
-    letter-spacing: 0.3em;
+    font-size: 0.62rem;
+    letter-spacing: 0.22em;
     text-transform: uppercase;
-    color: var(--ink-mute);
-}
-.stadium-card__tag {
-    padding: 4px 10px;
-    background: var(--accent-card);
-    color: #02110a;
-    border-radius: 3px;
-    font-weight: 700;
-}
-.stadium-card.is-selected .stadium-card__tag {
-    background: var(--accent-card);
-    color: #02110a;
-}
-.stadium-card:not(.is-selected) .stadium-card__tag {
-    background: rgba(243, 239, 226, 0.08);
     color: var(--ink-soft);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5em;
+    pointer-events: none;
+    white-space: nowrap;
 }
-.stadium-card__num {
-    font-family: var(--f-display);
-    font-size: 1.1rem;
-    letter-spacing: 0.08em;
-    color: var(--ink-mute);
+.stadium-viewport__chrome--tl { top: 30px; left: 30px; }
+.stadium-viewport__chrome--tr { top: 30px; right: 30px; }
+.stadium-viewport__chrome--bl { bottom: 30px; left: 30px; font-size: 0.7rem; letter-spacing: 0.16em; color: var(--ink); }
+.stadium-viewport__chrome--br { bottom: 30px; right: 30px; }
+.stadium-viewport__chrome--br .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent-card);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--accent-card) 65%, transparent);
+}
+.rec-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #ff5862;
+    box-shadow: 0 0 10px rgba(255, 88, 98, 0.7);
+    animation: rec-pulse 1.4s ease-in-out infinite;
+}
+@keyframes rec-pulse {
+    0%, 100% { opacity: 1;   transform: scale(1); }
+    50%      { opacity: 0.35; transform: scale(0.78); }
 }
 
-.stadium-card__art {
-    aspect-ratio: 18 / 10;
-    background:
-        radial-gradient(ellipse 70% 50% at 50% 0%, color-mix(in srgb, var(--accent-card) 18%, transparent), transparent 60%),
-        linear-gradient(180deg, rgba(5, 23, 13, 0.85), rgba(0, 5, 3, 0.95));
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 8px;
-    overflow: hidden;
-    position: relative;
-}
-.stadium-card__art svg {
-    width: 100%;
-    height: 100%;
+/* viewport footer ruler — five tick marks under the viewport */
+.stadium-viewport__rule {
+    position: absolute;
+    left: 30px; right: 30px;
+    bottom: 6px;
+    height: 6px;
+    z-index: 4;
+    pointer-events: none;
     display: block;
 }
+.stadium-viewport__rule .tick {
+    position: absolute;
+    top: 0;
+    left: var(--p, 0%);
+    width: 1px;
+    height: 100%;
+    background: rgba(243, 239, 226, 0.18);
+    transform: translateX(-0.5px);
+}
 
-/* live 3D viewer slot ---------------------------------- */
+/* ============== STADIUM CARD (3D viewer host) ========= */
+.stadium-card {
+    --accent-card: var(--accent);
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: inherit;
+    background: transparent;
+}
+
 .stadium-card__viewer {
     position: absolute;
     inset: 0;
     overflow: hidden;
     cursor: grab;
-    touch-action: none; /* let OrbitControls own pointer gestures */
+    touch-action: none;
 }
 .stadium-card__viewer.is-grabbing { cursor: grabbing; }
+
 .stadium-card__viewer-canvas {
     position: absolute;
     inset: 0;
@@ -1952,208 +2039,376 @@ kbd {
     height: 100% !important;
     display: block;
     opacity: 0;
-    transition: opacity 0.45s ease-out;
+    transition: opacity 0.55s cubic-bezier(0.2, 0.8, 0.2, 1);
     z-index: 1;
 }
 .stadium-card__viewer.is-ready .stadium-card__viewer-canvas { opacity: 1; }
 
-/* silhouette acts as the load/error fallback underneath the canvas */
+/* silhouette acts as the load/error fallback */
 .stadium-card__viewer-fallback {
     position: absolute;
     inset: 0;
-    transition: opacity 0.45s ease-out;
+    display: grid; place-items: center;
+    transition: opacity 0.55s ease-out;
 }
 .stadium-card__viewer-fallback svg {
-    width: 100%;
-    height: 100%;
+    width: 80%;
+    height: 80%;
     display: block;
 }
-/* fade the silhouette down but keep a faint trace, so we still have visible
-   chrome even if the 3D framing ever fails */
-.stadium-card__viewer.is-ready .stadium-card__viewer-fallback { opacity: 0.18; }
+.stadium-card__viewer.is-ready .stadium-card__viewer-fallback { opacity: 0.16; }
 .stadium-card__viewer.is-failed .stadium-card__viewer-fallback,
 .stadium-card__viewer.is-unsupported .stadium-card__viewer-fallback { opacity: 1; }
 
-/* drag-to-rotate hint -- bottom-left chip */
-.stadium-card__viewer-hint {
+/* a faint scanline texture over the viewport for film-feel */
+.stadium-viewport::after {
+    content: '';
     position: absolute;
-    left: 10px;
-    bottom: 10px;
-    z-index: 3;
-    display: inline-flex;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+    background:
+        repeating-linear-gradient(
+            0deg,
+            rgba(255,255,255,0.012) 0px,
+            rgba(255,255,255,0.012) 1px,
+            transparent 1px,
+            transparent 3px),
+        radial-gradient(ellipse 100% 70% at 50% 50%, transparent 60%, rgba(0,0,0,0.45));
+    mix-blend-mode: overlay;
+}
+
+/* ============== DOSSIER (right) ======================= */
+.stadium-dossier {
+    --accent-card: var(--accent);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.7rem, 1.4vw, 1.2rem);
+    padding: clamp(1rem, 1.6vw, 1.4rem) 0;
+}
+
+.stadium-dossier__top {
+    display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 5px 10px 5px 8px;
-    background: rgba(8, 18, 12, 0.66);
-    border: 1px solid rgba(243, 239, 226, 0.16);
-    border-radius: 999px;
-    backdrop-filter: blur(8px);
+    gap: 0.8rem;
+    color: var(--ink-mute);
     font-family: var(--f-mono);
     font-size: 0.62rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--ink-soft);
-    pointer-events: none;
-    opacity: 0;
-    transform: translateY(4px);
-    transition: opacity 0.5s ease 0.2s, transform 0.5s ease 0.2s;
-}
-.stadium-card__viewer-hint .dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--accent-card);
-    box-shadow: 0 0 10px color-mix(in srgb, var(--accent-card) 65%, transparent);
-}
-.stadium-card__viewer.is-ready .stadium-card__viewer-hint {
-    opacity: 1;
-    transform: translateY(0);
-}
-.stadium-card__viewer.is-grabbing .stadium-card__viewer-hint { opacity: 0.35; }
-
-/* loading state */
-.stadium-card__viewer-loading {
-    position: absolute;
-    inset: auto 10px 10px auto;
-    z-index: 3;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 5px 10px;
-    background: rgba(8, 18, 12, 0.66);
-    border: 1px solid rgba(243, 239, 226, 0.14);
-    border-radius: 999px;
-    backdrop-filter: blur(8px);
-    font-family: var(--f-mono);
-    font-size: 0.62rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--ink-soft);
-    opacity: 0;
-    transition: opacity 0.25s ease;
-    pointer-events: none;
-}
-.stadium-card__viewer.is-loading .stadium-card__viewer-loading { opacity: 1; }
-.stadium-card__viewer-loading .spinner {
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    border: 1.5px solid color-mix(in srgb, var(--accent-card) 45%, transparent);
-    border-top-color: var(--accent-card);
-    animation: stadium-spin 0.9s linear infinite;
-}
-@keyframes stadium-spin { to { transform: rotate(360deg); } }
-
-/* unsupported / failed → keep the silhouette visible, hide hint chips */
-.stadium-card__viewer.is-unsupported .stadium-card__viewer-hint,
-.stadium-card__viewer.is-failed .stadium-card__viewer-hint,
-.stadium-card__viewer.is-unsupported .stadium-card__viewer-loading,
-.stadium-card__viewer.is-failed .stadium-card__viewer-loading {
-    display: none;
-}
-
-.stadium-card__sub {
-    font-family: var(--f-mono);
-    font-size: 0.7rem;
     letter-spacing: 0.32em;
-    color: color-mix(in srgb, var(--accent-card) 70%, var(--ink-soft));
     text-transform: uppercase;
 }
-.stadium-card__name {
+.stadium-dossier__numlbl {
+    font-family: var(--f-display);
+    font-style: italic;
+    font-size: 1rem;
+    color: var(--ink-soft);
+    letter-spacing: 0.04em;
+}
+.stadium-dossier__num {
+    font-family: var(--f-display);
+    font-size: 2.2rem;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    color: color-mix(in srgb, var(--accent-card) 80%, var(--ink));
+    text-shadow: 0 0 24px color-mix(in srgb, var(--accent-card) 35%, transparent);
+}
+.stadium-dossier__hairline {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg,
+        rgba(243, 239, 226, 0.04),
+        rgba(243, 239, 226, 0.22) 60%,
+        rgba(243, 239, 226, 0.04));
+}
+.stadium-dossier__code {
+    color: color-mix(in srgb, var(--accent-card) 70%, var(--ink-soft));
+}
+
+.stadium-dossier__sub {
+    font-family: var(--f-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: color-mix(in srgb, var(--accent-card) 50%, var(--ink-soft));
+}
+
+.stadium-dossier__name {
     margin: 0;
     font-family: var(--f-display);
-    font-size: clamp(2rem, 4.5vw, 2.8rem);
-    line-height: 0.95;
+    font-size: clamp(3rem, 7vw, 5.4rem);
+    line-height: 0.86;
+    letter-spacing: -0.005em;
     text-transform: uppercase;
-    letter-spacing: 0.02em;
     color: var(--ink);
+    overflow: hidden; /* clip the flip animation */
 }
-.stadium-card__tagline {
-    margin: 0;
-    font-family: var(--f-body);
-    font-style: italic;
-    color: var(--ink-soft);
-    font-size: 0.95rem;
+.stadium-dossier__namewrap {
+    display: inline-block;
+    transform-origin: left center;
+    /* idle state */
+    opacity: 1;
+    transform: translateY(0) skewY(0deg);
+    filter: blur(0);
+    transition:
+        opacity 0.22s cubic-bezier(0.7, 0, 0.84, 0),
+        transform 0.22s cubic-bezier(0.7, 0, 0.84, 0),
+        filter 0.22s cubic-bezier(0.7, 0, 0.84, 0);
+}
+.stadium-dossier__namewrap.is-flipping-out {
+    opacity: 0;
+    transform: translateY(calc(-14px * var(--flip-sign, 1))) skewY(calc(2deg * var(--flip-sign, 1)));
+    filter: blur(8px);
+}
+.stadium-dossier__namewrap.is-flipping-in {
+    animation: stadium-name-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes stadium-name-in {
+    from {
+        opacity: 0;
+        transform: translateY(calc(14px * var(--flip-sign, 1))) skewY(calc(-2deg * var(--flip-sign, 1)));
+        filter: blur(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) skewY(0deg);
+        filter: blur(0);
+    }
 }
 
-.stadium-card__stats {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    padding: 12px 14px;
-    background: rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 8px;
-    margin-top: 4px;
+.stadium-dossier__tagline {
+    margin: 0;
+    font-family: 'Fraunces', 'Cormorant Garamond', Georgia, serif;
+    font-style: italic;
+    font-weight: 500;
+    font-size: clamp(1rem, 1.5vw, 1.2rem);
+    line-height: 1.45;
+    color: color-mix(in srgb, var(--ink) 80%, transparent);
+    letter-spacing: 0.005em;
 }
-.stadium-card__stats > div { display: grid; gap: 2px; }
-.stadium-card__stats .k {
+.stadium-dossier__tagline em {
+    font-style: italic;
+}
+
+/* chips */
+.stadium-dossier__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+}
+.stadium-chip {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 11px;
+    background: rgba(243, 239, 226, 0.05);
+    border: 1px solid rgba(243, 239, 226, 0.14);
+    border-radius: 999px;
+    font-family: var(--f-mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+}
+.stadium-chip--lead {
+    background: color-mix(in srgb, var(--accent-card) 22%, transparent);
+    border-color: color-mix(in srgb, var(--accent-card) 60%, transparent);
+    color: color-mix(in srgb, var(--ink) 90%, var(--accent-card));
+}
+
+/* dotted-leader stat list — table-of-contents style */
+.stadium-stats {
+    margin: 0.4rem 0 0;
+    padding: 0;
+    display: grid;
+    gap: 0.55rem;
+    border-top: 1px solid rgba(243, 239, 226, 0.08);
+    padding-top: 1rem;
+}
+.stadium-stats > div {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+.stadium-stats dt {
+    margin: 0;
+    font-family: var(--f-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    flex-shrink: 0;
+}
+.stadium-stats .lead {
+    flex: 1;
+    align-self: center;
+    border-bottom: 1px dotted rgba(243, 239, 226, 0.22);
+    transform: translateY(-2px);
+}
+.stadium-stats dd {
+    margin: 0;
+    font-family: var(--f-display);
+    font-size: 1.1rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink);
+    flex-shrink: 0;
+}
+.stadium-stats > div:nth-child(1) dd { color: color-mix(in srgb, var(--accent-card) 30%, var(--ink)); }
+
+/* expected-occupancy bar */
+.stadium-dossier__pulse {
+    margin-top: 0.4rem;
+    display: grid;
+    gap: 6px;
+}
+.stadium-dossier__pulse-track {
+    display: block;
+    height: 4px;
+    background: rgba(243, 239, 226, 0.06);
+    border-radius: 999px;
+    overflow: hidden;
+    position: relative;
+}
+.stadium-dossier__pulse-fill {
+    display: block;
+    width: var(--pct, 0%);
+    height: 100%;
+    background: linear-gradient(90deg,
+        color-mix(in srgb, var(--accent-card) 60%, transparent),
+        color-mix(in srgb, var(--accent-card) 100%, transparent));
+    box-shadow: 0 0 14px color-mix(in srgb, var(--accent-card) 60%, transparent);
+    transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.stadium-dossier__pulse-lbl {
+    display: flex;
+    justify-content: space-between;
     font-family: var(--f-mono);
     font-size: 0.6rem;
     letter-spacing: 0.28em;
-    color: var(--ink-mute);
     text-transform: uppercase;
+    color: var(--ink-mute);
 }
-.stadium-card__stats .v {
+
+/* ============== FOOTER NAV ============================ */
+.stadium-footnav {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 1.2rem;
+    padding-top: 0.4rem;
+    border-top: 1px solid rgba(243, 239, 226, 0.08);
+    padding-block: 1rem;
+}
+.stadium-nav {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    color: var(--ink);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 8px 4px;
+    font-family: inherit;
+    transition: transform 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+}
+.stadium-nav--prev { justify-self: start; text-align: left; }
+.stadium-nav--next { justify-self: end;   text-align: right; }
+.stadium-nav__arrow {
+    width: 38px; height: 38px;
+    display: grid; place-items: center;
+    border: 1px solid rgba(243, 239, 226, 0.18);
+    border-radius: 999px;
+    color: var(--ink);
+    font-size: 0.85rem;
+    transition: all 0.2s ease;
+    background: rgba(8, 18, 12, 0.5);
+    backdrop-filter: blur(10px);
+}
+.stadium-nav:hover .stadium-nav__arrow {
+    background: color-mix(in srgb, var(--accent-card) 22%, rgba(8,18,12,0.5));
+    border-color: color-mix(in srgb, var(--accent-card) 70%, transparent);
+    color: var(--ink);
+    box-shadow: 0 0 22px color-mix(in srgb, var(--accent-card) 50%, transparent);
+}
+.stadium-nav:hover { transform: translateY(-1px); }
+.stadium-nav--prev:hover .stadium-nav__arrow { transform: translateX(-2px); }
+.stadium-nav--next:hover .stadium-nav__arrow { transform: translateX(2px); }
+.stadium-nav__col {
+    display: grid;
+    gap: 2px;
+    line-height: 1;
+}
+.stadium-nav__col--right { justify-items: end; }
+.stadium-nav__lbl {
+    font-family: var(--f-mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+}
+.stadium-nav__sub {
     font-family: var(--f-display);
     font-size: 1.05rem;
     letter-spacing: 0.04em;
     color: var(--ink);
     text-transform: uppercase;
+    max-width: 18ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
+.stadium-nav:disabled { opacity: 0.3; cursor: not-allowed; }
+.stadium-nav:focus-visible { outline: 2px solid var(--accent-card); outline-offset: 4px; border-radius: 4px; }
 
-/* slide-in animations ---------------------------------- */
-.stadium-card.slide-from-right { animation: stadium-slide-r 0.35s ease-out; }
-.stadium-card.slide-from-left  { animation: stadium-slide-l 0.35s ease-out; }
-@keyframes stadium-slide-r {
-    from { opacity: 0; transform: translateX(36px) scale(0.985); }
-    to   { opacity: 1; transform: translateX(0)    scale(1); }
-}
-@keyframes stadium-slide-l {
-    from { opacity: 0; transform: translateX(-36px) scale(0.985); }
-    to   { opacity: 1; transform: translateX(0)     scale(1); }
-}
-
-/* dot indicators --------------------------------------- */
+/* dot indicators */
 .stadium-dots {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
+    justify-content: center;
 }
 .stadium-dot {
     --accent-card: var(--accent);
     appearance: none;
     width: 10px; height: 10px;
     border-radius: 50%;
-    background: rgba(243, 239, 226, 0.18);
+    background: rgba(243, 239, 226, 0.16);
     border: 1px solid rgba(243, 239, 226, 0.18);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
     padding: 0;
 }
-.stadium-dot:hover { background: rgba(243, 239, 226, 0.32); transform: scale(1.15); }
+.stadium-dot:hover { background: rgba(243, 239, 226, 0.32); transform: scale(1.18); }
 .stadium-dot.is-active {
     background: var(--accent-card);
     border-color: var(--accent-card);
-    width: 28px;
+    width: 32px;
     border-radius: 6px;
-    box-shadow: 0 0 12px color-mix(in srgb, var(--accent-card) 60%, transparent);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--accent-card) 70%, transparent);
 }
-.stadium-dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.stadium-dot:focus-visible { outline: 2px solid var(--accent-card); outline-offset: 4px; }
 
-/* actions / hints -------------------------------------- */
+/* actions / hints --------------------------------------- */
 .stadium-actions {
     display: flex;
     gap: 16px;
     align-items: center;
-    margin-top: 0.4rem;
+    justify-content: flex-end;
+}
+.stadium-actions .ghost-btn {
+    margin-right: auto;
 }
 .stadium-keyhints {
     display: flex;
     gap: 1.4rem;
     flex-wrap: wrap;
     justify-content: center;
+    padding-top: 0.6rem;
     font-family: var(--f-mono);
-    font-size: 0.7rem;
-    letter-spacing: 0.22em;
+    font-size: 0.68rem;
+    letter-spacing: 0.28em;
     text-transform: uppercase;
     color: var(--ink-mute);
 }
@@ -2166,6 +2421,38 @@ kbd {
     color: var(--ink-soft);
     font-size: 0.7rem;
     font-family: var(--f-mono);
+}
+
+/* ============== RESPONSIVE COLLAPSE =================== */
+@media (max-width: 980px) {
+    .stadium-broadside {
+        grid-template-columns: 1fr;
+        gap: 1.4rem;
+    }
+    .stadium-viewport { aspect-ratio: 16 / 10; }
+    .stadium-topline {
+        grid-template-columns: auto 1fr auto;
+        font-size: 0.6rem;
+    }
+    .stadium-topline__rule--short,
+    .stadium-topline__date { display: none; }
+    .stadium-dossier__name { font-size: clamp(2.6rem, 9vw, 4rem); }
+}
+@media (max-width: 620px) {
+    .stadium-viewport__chrome { font-size: 0.55rem; padding: 4px 9px; }
+    .stadium-viewport__chrome--tl,
+    .stadium-viewport__chrome--tr { top: 18px; }
+    .stadium-viewport__chrome--bl,
+    .stadium-viewport__chrome--br { bottom: 18px; }
+    .stadium-viewport__chrome--tl { left: 18px; }
+    .stadium-viewport__chrome--tr { right: 18px; }
+    .stadium-viewport__chrome--bl { left: 18px; font-size: 0.6rem; }
+    .stadium-viewport__chrome--br { right: 18px; }
+    .stadium-viewport__brackets .b { width: 18px; height: 18px; }
+    .stadium-footnav { grid-template-columns: 1fr; gap: 0.6rem; justify-items: center; }
+    .stadium-nav__sub { display: none; }
+    .stadium-actions { flex-direction: column-reverse; align-items: stretch; }
+    .stadium-actions .ghost-btn { margin: 0; }
 }
 
 /* responsive trims --------------------------------------- */

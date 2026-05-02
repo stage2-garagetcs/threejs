@@ -135,7 +135,7 @@ function showScreen(id) {
 // back button can walk back through screens.
 function gotoScreen(target, { replace = false } = {}) {
     if (STATE.screen === 'playing' && target !== 'playing') teardownGame();
-    if (STATE.screen === 'stadium' && target !== 'stadium') STADIUM_PREVIEW?.detach();
+    if (STATE.screen === 'stadium' && target !== 'stadium') { STADIUM_PREVIEW?.detach(); stopTimecode(); }
     STATE.screen = target;
     showScreen(SCREEN_TO_DOM[target] || (target + '-screen'));
     const stateObj = { screen: target };
@@ -146,7 +146,7 @@ function gotoScreen(target, { replace = false } = {}) {
 
 function navigateToFromPopState(target) {
     if (STATE.screen === 'playing' && target !== 'playing') teardownGame();
-    if (STATE.screen === 'stadium' && target !== 'stadium') STADIUM_PREVIEW?.detach();
+    if (STATE.screen === 'stadium' && target !== 'stadium') { STADIUM_PREVIEW?.detach(); stopTimecode(); }
     STATE.screen = target;
     showScreen(SCREEN_TO_DOM[target] || (target + '-screen'));
 }
@@ -246,9 +246,13 @@ function openStadiumPicker() {
     // Show the screen first so the card has real dimensions when the 3D viewer
     // measures itself; otherwise getBoundingClientRect would return 0×0.
     gotoScreen('stadium');
+    ensureStadiumPickerScaffold();
+    const total = $('stadium-pagetotal');
+    if (total) total.textContent = String(STADIUMS.length).padStart(2, '0');
     renderStadiumCard(stadiumPickerIdx, 0);
     renderStadiumDots();
     refreshStadiumArrows();
+    startTimecode();
 }
 
 function navigateStadium(delta) {
@@ -285,61 +289,153 @@ function renderStadiumDots() {
     });
 }
 
+// Build the persistent viewer slot inside #stadium-card exactly once. The
+// 3D preview reattaches its canvas here every navigation, so we don't want to
+// nuke its DOM with an innerHTML reset.
+function ensureStadiumPickerScaffold() {
+    const card = $('stadium-card');
+    if (!card || card.querySelector('.stadium-card__viewer')) return;
+    card.innerHTML = `
+        <div class="stadium-card__viewer" id="stadium-viewer">
+            <div class="stadium-card__viewer-fallback" id="stadium-fallback"></div>
+        </div>
+    `;
+}
+
+// Stadium "code" — first 3 letters of each of the first two words (CAM·NOU).
+function stadiumCode(stadium) {
+    return stadium.name.split(/\s+/).slice(0, 2)
+        .map(w => w.replace(/[^A-Za-z0-9]/g, '').slice(0, 3).toUpperCase())
+        .filter(Boolean).join('·') || stadium.id.toUpperCase();
+}
+
+// Stable faux-occupancy percentage so each stadium has its own "pulse" number
+// without polluting the catalog with invented data.
+function stadiumPulsePct(stadium) {
+    let h = 0;
+    for (const c of stadium.id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    return 64 + (h % 32); // 64..95
+}
+
+function setText(id, value) {
+    const el = $(id);
+    if (el && el.textContent !== value) el.textContent = value;
+}
+
+// Animate the dossier name with a directional fade-and-blur swap.
+function flipStadiumName(newName, dir) {
+    const wrap = document.querySelector('#stadium-name .stadium-dossier__namewrap');
+    if (!wrap) return;
+    if (wrap.textContent === newName && !dir) { wrap.textContent = newName; return; }
+    const sign = dir < 0 ? -1 : 1;
+    wrap.style.setProperty('--flip-sign', sign);
+    wrap.classList.remove('is-flipping-in');
+    wrap.classList.add('is-flipping-out');
+    setTimeout(() => {
+        wrap.textContent = newName;
+        wrap.classList.remove('is-flipping-out');
+        wrap.classList.add('is-flipping-in');
+        setTimeout(() => wrap.classList.remove('is-flipping-in'), 380);
+    }, 200);
+}
+
 function renderStadiumCard(idx, dir) {
     const card = $('stadium-card');
     if (!card) return;
+    const stage   = document.querySelector('#stadium-screen .stadium-stage');
     const stadium = STADIUMS[idx];
     const selectedId = getSelectedStadium().id;
     const isCurrent  = stadium.id === selectedId;
     const hasModel   = !!stadium.file && typeof THREE.GLTFLoader === 'function';
 
+    // accent variable cascades to floodlight, dossier, chips, etc.
+    if (stage) stage.style.setProperty('--accent-card', stadium.accent);
     card.style.setProperty('--accent-card', stadium.accent);
     card.dataset.silhouette = stadium.silhouette || 'bowl';
     card.classList.toggle('is-selected', isCurrent);
 
-    // The art slot either hosts the live 3D viewer (preferred when a .glb is
-    // available) or the flat silhouette as a graceful fallback.
-    const artInner = hasModel
-        ? `<div class="stadium-card__viewer" data-stadium="${stadium.id}">
-               <div class="stadium-card__viewer-fallback">${stadiumSilhouetteSVG(stadium)}</div>
-               <div class="stadium-card__viewer-hint" aria-hidden="true">
-                   <span class="dot"></span><span>Sleep om te draaien · scroll om te zoomen</span>
-               </div>
-               <div class="stadium-card__viewer-loading" aria-hidden="true">
-                   <span class="spinner"></span><span>Stadion laden…</span>
-               </div>
-           </div>`
-        : stadiumSilhouetteSVG(stadium);
+    // refresh silhouette fallback (sits behind the canvas for load/error states)
+    const fallback = $('stadium-fallback');
+    if (fallback) fallback.innerHTML = stadiumSilhouetteSVG(stadium);
 
-    card.innerHTML = `
-        <div class="stadium-card__chrome">
-            <span class="stadium-card__tag">${isCurrent ? 'GESELECTEERD' : 'OPTIE'}</span>
-            <span class="stadium-card__num tabular">${String(idx+1).padStart(2,'0')} / ${String(STADIUMS.length).padStart(2,'0')}</span>
-        </div>
-        <div class="stadium-card__art">${artInner}</div>
-        <div class="stadium-card__sub">${stadium.sub}</div>
-        <h3 class="stadium-card__name">${stadium.name}</h3>
-        <p class="stadium-card__tagline">${stadium.tagline}</p>
-        <div class="stadium-card__stats">
-            <div><span class="k">Capaciteit</span><span class="v tabular">${stadium.capacity}</span></div>
-            <div><span class="k">Sfeer</span><span class="v">${stadium.mood}</span></div>
-            <div><span class="k">Type</span><span class="v">${(stadium.silhouette || 'bowl').toUpperCase()}</span></div>
-        </div>
-    `;
+    // dossier text
+    flipStadiumName(stadium.name.toUpperCase(), dir);
+    setText('stadium-sub',      stadium.sub);
+    setText('stadium-num',      String(idx + 1).padStart(2, '0'));
+    setText('stadium-page',     String(idx + 1).padStart(2, '0'));
+    setText('stadium-cam',      String(idx + 1).padStart(2, '0'));
+    setText('stadium-code',     stadiumCode(stadium));
+    setText('stadium-stat-cap', stadium.capacity);
+    setText('stadium-stat-mood', stadium.mood);
+    setText('stadium-stat-type', (stadium.silhouette || 'bowl').toUpperCase());
+    setText('stadium-stat-status', isCurrent ? 'GESELECTEERD' : 'OPTIE');
 
-    // re-trigger slide animation
-    card.classList.remove('slide-from-left', 'slide-from-right');
-    void card.offsetWidth;
-    if (dir > 0)      card.classList.add('slide-from-right');
-    else if (dir < 0) card.classList.add('slide-from-left');
+    // tagline (italic serif, with quotes)
+    const tag = $('stadium-tagline');
+    if (tag) tag.innerHTML = `<em>&ldquo;${stadium.tagline}&rdquo;</em>`;
 
-    // mount or swap the 3D preview into the freshly-rendered viewer slot
+    // chips: split sub on · and add silhouette as final chip
+    const chips = $('stadium-chips');
+    if (chips) {
+        const parts = (stadium.sub || '').split('·').map(s => s.trim()).filter(Boolean);
+        parts.push((stadium.silhouette || 'bowl').toUpperCase());
+        chips.innerHTML = parts.map((p, i) =>
+            `<span class="stadium-chip${i === 0 ? ' stadium-chip--lead' : ''}">${p}</span>`
+        ).join('');
+    }
+
+    // expected-occupancy pulse
+    const pct = stadiumPulsePct(stadium);
+    const fill = $('stadium-pulse-fill');
+    if (fill) fill.style.setProperty('--pct', pct + '%');
+    setText('stadium-pulse-pct', pct + '%');
+
+    // prev/next preview labels in the footer nav
+    const total = STADIUMS.length;
+    const prevS = STADIUMS[(idx - 1 + total) % total];
+    const nextS = STADIUMS[(idx + 1) % total];
+    setText('stadium-nav-prev-name', prevS.name);
+    setText('stadium-nav-next-name', nextS.name);
+
+    // re-trigger broadside slide animation directionally
+    if (stage) {
+        stage.classList.remove('is-flipping-l', 'is-flipping-r');
+        void stage.offsetWidth;
+        if (dir > 0)      stage.classList.add('is-flipping-r');
+        else if (dir < 0) stage.classList.add('is-flipping-l');
+    }
+
+    // mount or swap the 3D preview
     if (hasModel) {
-        const slot = card.querySelector('.stadium-card__viewer');
+        const slot = $('stadium-viewer');
         if (slot) STADIUM_PREVIEW.show(stadium, slot);
     } else {
         STADIUM_PREVIEW.detach();
     }
+}
+
+// ----------- timecode ticker (cinematic chrome on the viewer) -----------
+let timecodeRaf = 0;
+let timecodeStart = 0;
+function startTimecode() {
+    if (timecodeRaf) return;
+    timecodeStart = performance.now();
+    const el = $('stadium-tc');
+    if (!el) return;
+    const tick = () => {
+        if (STATE.screen !== 'stadium') { timecodeRaf = 0; return; }
+        const t = (performance.now() - timecodeStart) / 1000;
+        const m = Math.floor(t / 60).toString().padStart(2, '0');
+        const s = Math.floor(t % 60).toString().padStart(2, '0');
+        const f = Math.floor((t * 24) % 24).toString().padStart(2, '0');
+        el.textContent = `00:${m}:${s}:${f}`;
+        timecodeRaf = requestAnimationFrame(tick);
+    };
+    timecodeRaf = requestAnimationFrame(tick);
+}
+function stopTimecode() {
+    if (timecodeRaf) cancelAnimationFrame(timecodeRaf);
+    timecodeRaf = 0;
 }
 
 // ----------- stadium picker preview (live .glb viewer) -----------
@@ -438,20 +534,24 @@ const STADIUM_PREVIEW = (() => {
         }
         const size   = bbox.getSize(new THREE.Vector3());
         const center = bbox.getCenter(new THREE.Vector3());
-        // sphere that contains the whole model — robust regardless of which
-        // axis is longest (stadiums are flat & wide; the in-game camera is
-        // close to the ground, so naive "longest axis" framing put us above
-        // the bowl looking straight down at empty grass)
-        const radius = Math.max(size.length() * 0.5, 1);
-
-        const halfFovV = (camera.fov * Math.PI / 180) * 0.5;
-        const halfFovH = Math.atan(Math.tan(halfFovV) * Math.max(0.1, camera.aspect));
-        const halfFov  = Math.min(halfFovV, halfFovH);
-        const dist     = radius / Math.sin(halfFov) * 1.15;
 
         // pick a flattering "stadium tour" angle: ~22° elevation, ~32° azimuth
         const elev = Math.PI * 0.12;
         const azim = Math.PI * 0.18;
+
+        const halfFovV = (camera.fov * Math.PI / 180) * 0.5;
+        const halfFovH = Math.atan(Math.tan(halfFovV) * Math.max(0.1, camera.aspect));
+
+        // proper fit-to-frustum: project the model footprint and stand far
+        // enough back that the worst-case axis (horizontal or vertical) fits.
+        // Using only the bounding sphere over-reserved space because stadiums
+        // are very flat — vertical headroom was wasted, leaving the model
+        // looking small in the frame.
+        const footprintR = Math.hypot(size.x, size.z) * 0.5;
+        const distH = footprintR / Math.tan(halfFovH);
+        const distV = (size.y * 0.5 + footprintR * Math.sin(elev)) / Math.tan(halfFovV);
+        const dist  = Math.max(distH, distV, 1) * 1.05;
+
         const off  = new THREE.Vector3(
             Math.sin(azim) * Math.cos(elev),
             Math.sin(elev),
@@ -467,8 +567,9 @@ const STADIUM_PREVIEW = (() => {
         camera.far  = dist * 60;
         camera.updateProjectionMatrix();
 
-        controls.minDistance = radius * 0.9;
-        controls.maxDistance = radius * 4.5;
+        const sphereR = Math.max(size.length() * 0.5, 1);
+        controls.minDistance = sphereR * 0.6;
+        controls.maxDistance = sphereR * 4.5;
         controls.update();
     }
 
@@ -513,10 +614,6 @@ const STADIUM_PREVIEW = (() => {
         model = obj;
         if (!scene.children.includes(model)) scene.add(model);
         frameModel(model);
-        const b = new THREE.Box3().setFromObject(obj);
-        const s = b.getSize(new THREE.Vector3());
-        console.log('[stadium-preview] model size', s, 'center', b.getCenter(new THREE.Vector3()),
-                    'cam', camera.position.toArray(), 'target', controls.target.toArray());
     }
 
     function show(stadium, slot) {
