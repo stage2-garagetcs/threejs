@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PITCH ROYALE — Lokale Aftrap</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="grain" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+
+    <!-- ============ LOADING SCREEN ============ -->
+    <div id="loading-screen" class="screen active">
+        <!-- blueprint-style pitch lines covering the whole screen -->
+        <svg class="loading-pitch" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+            <g fill="none" stroke="rgba(247,243,227,0.09)" stroke-width="1.1">
+                <!-- horizontal lines -->
+                <line x1="0" y1="130" x2="1600" y2="130"/>
+                <line x1="0" y1="290" x2="1600" y2="290"/>
+                <line x1="0" y1="450" x2="1600" y2="450"/>
+                <line x1="0" y1="610" x2="1600" y2="610"/>
+                <line x1="0" y1="770" x2="1600" y2="770"/>
+                <!-- vertical lines -->
+                <line x1="200" y1="0"  x2="200" y2="900"/>
+                <line x1="800" y1="0"  x2="800" y2="900"/>
+                <line x1="1400" y1="0" x2="1400" y2="900"/>
+                <!-- corner arcs -->
+                <path d="M 0 70 A 70 70 0 0 1 70 0"/>
+                <path d="M 1530 0 A 70 70 0 0 1 1600 70"/>
+                <path d="M 1600 830 A 70 70 0 0 1 1530 900"/>
+                <path d="M 70 900 A 70 70 0 0 1 0 830"/>
+            </g>
+        </svg>
+
+        <div class="loading-stage">
+            <div class="loading-ball" aria-hidden="true">
+                <svg viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="46" fill="#f7f3e3" stroke="#1a1a1a" stroke-width="1.2"/>
+                    <g fill="#1a1a1a">
+                        <polygon points="50,18 62,28 58,42 42,42 38,28"/>
+                        <polygon points="20,42 32,38 38,52 28,64 16,58"/>
+                        <polygon points="80,42 84,58 72,64 62,52 68,38"/>
+                        <polygon points="34,68 50,62 66,68 60,82 40,82"/>
+                    </g>
+                </svg>
+            </div>
+            <div class="loading-text">
+                <span class="loading-text__title">PITCH ROYALE</span>
+                <span class="loading-text__sub">VELD KLAARMAKEN<span class="loading-dots"><i>.</i><i>.</i><i>.</i></span></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ LAUNCH SCREEN ============ -->
+    <div id="launch-screen" class="screen">
+        <div class="launch-prompt">Klik om te starten</div>
+        <div class="floodlight floodlight--left"></div>
+        <div class="floodlight floodlight--right"></div>
+
+        <!-- chalk-drawn pitch silhouette behind the title -->
+        <svg class="pitch-frame" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+            <defs>
+                <linearGradient id="chalkLine" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stop-color="rgba(255,255,255,0)"/>
+                    <stop offset="50%" stop-color="rgba(255,255,255,0.18)"/>
+                    <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+                </linearGradient>
+            </defs>
+            <g fill="none" stroke="url(#chalkLine)" stroke-width="2.5">
+                <rect x="120" y="120" width="1360" height="660" rx="2"/>
+                <line x1="800" y1="120" x2="800" y2="780"/>
+                <circle cx="800" cy="450" r="120"/>
+                <circle cx="800" cy="450" r="3" fill="rgba(255,255,255,0.18)" stroke="none"/>
+                <!-- left penalty box -->
+                <rect x="120" y="280" width="180" height="340"/>
+                <rect x="120" y="370" width="70" height="160"/>
+                <!-- right penalty box -->
+                <rect x="1300" y="280" width="180" height="340"/>
+                <rect x="1410" y="370" width="70" height="160"/>
+                <!-- corner arcs -->
+                <path d="M 120 140 A 20 20 0 0 1 140 120"/>
+                <path d="M 1480 120 A 20 20 0 0 1 1480 140"/>
+                <path d="M 1480 760 A 20 20 0 0 1 1460 780"/>
+                <path d="M 140 780 A 20 20 0 0 1 120 760"/>
+            </g>
+        </svg>
+
+        <!-- floating football icon -->
+        <svg class="ball-icon" viewBox="0 0 100 100" aria-hidden="true">
+            <circle cx="50" cy="50" r="46" fill="#f7f3e3" stroke="#1a1a1a" stroke-width="1.2"/>
+            <g fill="#1a1a1a">
+                <polygon points="50,18 62,28 58,42 42,42 38,28"/>
+                <polygon points="20,42 32,38 38,52 28,64 16,58"/>
+                <polygon points="80,42 84,58 72,64 62,52 68,38"/>
+                <polygon points="34,68 50,62 66,68 60,82 40,82"/>
+            </g>
+            <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1"/>
+        </svg>
+
+        <div class="launch-stage">
+            <div class="launch-eyebrow">
+                <span class="dot"></span>
+                <span>MATCHDAY · SEIZOEN 25 / 26 — LIVE VANAVOND</span>
+                <span class="dot"></span>
+            </div>
+            <h1 class="launch-title" aria-label="PITCH ROYALE">
+                <span class="word word--top">
+                    <span class="char" style="--i:0">P</span>
+                    <span class="char" style="--i:1">I</span>
+                    <span class="char" style="--i:2">T</span>
+                    <span class="char" style="--i:3">C</span>
+                    <span class="char" style="--i:4">H</span>
+                </span>
+                <span class="word word--bot">
+                    <span class="char" style="--i:5">R</span>
+                    <span class="char" style="--i:6">O</span>
+                    <span class="char" style="--i:7">Y</span>
+                    <span class="char" style="--i:8">A</span>
+                    <span class="char" style="--i:9">L</span>
+                    <span class="char" style="--i:10">E</span>
+                </span>
+            </h1>
+            <p class="launch-tag">Jouw club · jouw tactiek · jouw moment.</p>
+            <button id="launch-cta" class="cta-button cta-button--gold">
+                <span class="cta-button__inner">
+                    <span class="cta-button__label">Betreed het stadion</span>
+                    <span class="cta-button__arrow">→</span>
+                </span>
+            </button>
+            <div class="launch-meta">
+                <div class="meta-block">
+                    <span class="meta-key">Stadion</span>
+                    <span class="meta-val">Arena Nocturne</span>
+                </div>
+                <div class="meta-block">
+                    <span class="meta-key">Capaciteit</span>
+                    <span class="meta-val">2 spelers</span>
+                </div>
+                <div class="meta-block">
+                    <span class="meta-key">Wedstrijd</span>
+                    <span class="meta-val tabular">90 sec</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Captain #07 jersey badge — bottom-right matchday accent -->
+        <div class="jersey" aria-hidden="true">
+            <svg viewBox="0 0 200 240" preserveAspectRatio="xMidYMid meet">
+                <defs>
+                    <linearGradient id="jerseyGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%"  stop-color="#0d2718"/>
+                        <stop offset="100%" stop-color="#02110a"/>
+                    </linearGradient>
+                </defs>
+                <!-- jersey shape -->
+                <path d="M 40 20 Q 100 8 160 20 L 196 60 L 168 92 L 168 232 L 32 232 L 32 92 L 4 60 Z"
+                      fill="url(#jerseyGrad)" stroke="rgba(255,255,255,0.18)" stroke-width="1.2"/>
+                <!-- collar -->
+                <path d="M 80 18 Q 100 36 120 18" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+                <!-- captain band -->
+                <rect x="148" y="64" width="20" height="6" fill="#22c55e"/>
+                <!-- big 07 number -->
+                <text x="100" y="170" text-anchor="middle" fill="#f3eed8"
+                      style="font-family: Anton, Impact, sans-serif; font-size: 110px; letter-spacing: -4px;">07</text>
+                <!-- name tag -->
+                <text x="100" y="200" text-anchor="middle" fill="rgba(255,255,255,0.55)"
+                      style="font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 4px;">CAPTAIN</text>
+            </svg>
+        </div>
+
+        <!-- bottom-left footer badge -->
+        <div class="launch-footer">
+            <span class="launch-footer__title">★ ARENA NOCTURNE</span>
+            <span class="launch-footer__sub">EST. 2025</span>
+        </div>
+        <div class="ticker" aria-hidden="true">
+            <div class="ticker__track">
+                <span>★ ROOD vs BLAUW ★ KOP OF MUNT BESLIST ★ AFTRAP IN HET MIDDEN ★ GEEN SLAPPELING WINT ★ ROOD vs BLAUW ★ KOP OF MUNT BESLIST ★ AFTRAP IN HET MIDDEN ★ GEEN SLAPPELING WINT ★</span>
+                <span aria-hidden="true">★ ROOD vs BLAUW ★ KOP OF MUNT BESLIST ★ AFTRAP IN HET MIDDEN ★ GEEN SLAPPELING WINT ★ ROOD vs BLAUW ★ KOP OF MUNT BESLIST ★ AFTRAP IN HET MIDDEN ★ GEEN SLAPPELING WINT ★</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ SETUP / PLAYER CREATION ============ -->
+    <div id="setup-screen" class="screen">
+        <div class="setup-header">
+            <span class="crumb">01 / OPSTELLING</span>
+            <h2 class="setup-title">Stel je <em>spelers</em> op</h2>
+            <p class="setup-sub">Voer namen in. Kies een team. Ruil indien nodig. Tijd om te leveren.</p>
+
+            <div class="mode-switch" role="tablist" aria-label="Spelmodus">
+                <button class="mode-tab active" data-mode="duo" role="tab" aria-selected="true">
+                    <span class="mode-tab__num">01</span>
+                    <span class="mode-tab__label">Hot-Seat · 2 Spelers</span>
+                </button>
+                <button class="mode-tab" data-mode="cpu" role="tab" aria-selected="false">
+                    <span class="mode-tab__num">02</span>
+                    <span class="mode-tab__label">Tegen CPU</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="roster">
+            <div class="roster-card roster-card--red" data-slot="p1">
+                <div class="roster-card__chrome">
+                    <span class="roster-card__tag">THUIS</span>
+                    <span class="roster-card__num tabular">01</span>
+                </div>
+                <div class="roster-card__crest" aria-hidden="true">
+                    <svg viewBox="0 0 100 100"><polygon points="50,4 96,28 96,72 50,96 4,72 4,28" /></svg>
+                    <span>R</span>
+                </div>
+                <div class="roster-card__body">
+                    <label class="field">
+                        <span class="field__label">Naam Speler 1</span>
+                        <span class="field__wrap">
+                            <input id="p1-name" class="field__input" type="text" maxlength="14" placeholder="bv. Daan" autocomplete="off">
+                            <button class="field__clear" data-target="p1-name" type="button" title="Wissen" aria-label="Wis naam">×</button>
+                        </span>
+                    </label>
+                    <div class="roster-card__meta">
+                        <div><span class="k">Team</span><span class="v">Rood</span></div>
+                        <div><span class="k">Controls</span><span class="v tabular">WASD · SPATIE</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="roster-vs">
+                <button id="swap-teams" class="swap-btn" title="Wissel teams" aria-label="Wissel teams">
+                    <span>VS</span>
+                    <span class="swap-btn__sub">wissel</span>
+                </button>
+            </div>
+
+            <div class="roster-card roster-card--blue" data-slot="p2">
+                <div class="roster-card__chrome">
+                    <span class="roster-card__tag">UIT</span>
+                    <span class="roster-card__num tabular">02</span>
+                </div>
+                <div class="roster-card__crest" aria-hidden="true">
+                    <svg viewBox="0 0 100 100"><polygon points="50,4 96,28 96,72 50,96 4,72 4,28" /></svg>
+                    <span>B</span>
+                </div>
+                <div class="roster-card__body">
+                    <label class="field">
+                        <span class="field__label">Naam Speler 2</span>
+                        <span class="field__wrap">
+                            <input id="p2-name" class="field__input" type="text" maxlength="14" placeholder="bv. Sem" autocomplete="off">
+                            <button class="field__clear" data-target="p2-name" type="button" title="Wissen" aria-label="Wis naam">×</button>
+                        </span>
+                    </label>
+                    <div class="roster-card__meta">
+                        <div><span class="k">Team</span><span class="v">Blauw</span></div>
+                        <div><span class="k">Controls</span><span class="v tabular">PIJLEN · ENTER</span></div>
+                    </div>
+                    <div class="roster-card__cpu" hidden>
+                        <div class="cpu-orb"><span></span></div>
+                        <div class="cpu-name">CPU.NOCTURNE</div>
+                        <div class="cpu-tag">AUTONOMOUS · v1.0</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="setup-footer">
+            <button id="to-coin" class="cta-button cta-button--gold" disabled>
+                <span class="cta-button__inner">
+                    <span class="cta-button__label">Naar de toss</span>
+                    <span class="cta-button__arrow">→</span>
+                </span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ============ COIN FLIP ============ -->
+    <div id="coin-screen" class="screen">
+        <div class="coin-stage">
+            <div class="coin-eyebrow">
+                <span class="crumb">02 / DE TOSS</span>
+            </div>
+            <h2 class="coin-title">Kop <em>of</em> Munt</h2>
+            <p class="coin-caller">
+                <span id="coin-caller-name">Speler 1</span> mag kiezen — winnaar krijgt de aftrap.
+            </p>
+
+            <div class="coin-arena">
+                <div class="coin-shadow"></div>
+                <div class="coin3d" id="coin3d">
+                    <div class="coin3d__face coin3d__face--heads">
+                        <div class="coin3d__rim"></div>
+                        <div class="coin3d__engrave">
+                            <span class="coin3d__big">K</span>
+                            <span class="coin3d__small">KOP</span>
+                            <svg class="coin3d__icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.4"/>
+                                <path d="M12 3 L14 9 L20 9 L15 13 L17 19 L12 15 L7 19 L9 13 L4 9 L10 9 Z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="coin3d__face coin3d__face--tails">
+                        <div class="coin3d__rim"></div>
+                        <div class="coin3d__engrave">
+                            <span class="coin3d__big">M</span>
+                            <span class="coin3d__small">MUNT</span>
+                            <svg class="coin3d__icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.4"/>
+                                <path d="M6 12 Q12 4 18 12 Q12 20 6 12 Z M9 12 a3 3 0 1 0 6 0 a3 3 0 1 0 -6 0" fill="none" stroke="currentColor" stroke-width="1.2"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="coin3d__edge"></div>
+                </div>
+            </div>
+
+            <div class="coin-choices">
+                <button id="pick-heads" class="pick-btn pick-btn--heads">
+                    <span class="pick-btn__num">K</span>
+                    <span class="pick-btn__lbl">Kop</span>
+                </button>
+                <button id="pick-tails" class="pick-btn pick-btn--tails">
+                    <span class="pick-btn__num">M</span>
+                    <span class="pick-btn__lbl">Munt</span>
+                </button>
+            </div>
+
+            <div id="coin-result" class="coin-result">
+                <span class="coin-result__line"></span>
+                <span class="coin-result__text"></span>
+            </div>
+
+            <button id="kickoff-btn" class="cta-button cta-button--gold coin-cta" hidden>
+                <span class="cta-button__inner">
+                    <span class="cta-button__label">Aftrap</span>
+                    <span class="cta-button__arrow">→</span>
+                </span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ============ GAME ============ -->
+    <div id="game-screen" class="screen">
+        <div class="hud-top">
+            <div class="hud-team hud-team--red">
+                <span class="hud-team__chip">R</span>
+                <div class="hud-team__name" id="hud-p1-name">Speler 1</div>
+                <div class="hud-team__sub">Rood</div>
+            </div>
+
+            <div class="hud-center">
+                <div class="hud-score tabular">
+                    <span id="hud-s1">0</span>
+                    <span class="hud-score__sep">·</span>
+                    <span id="hud-s2">0</span>
+                </div>
+                <div class="hud-timer tabular" id="hud-timer">1:30</div>
+                <div class="hud-status" id="hud-status">LIVE</div>
+            </div>
+
+            <div class="hud-team hud-team--blue">
+                <div class="hud-team__name" id="hud-p2-name">Speler 2</div>
+                <div class="hud-team__sub">Blauw</div>
+                <span class="hud-team__chip">B</span>
+            </div>
+        </div>
+
+        <div class="hud-controls">
+            <div class="hud-controls__col hud-controls__col--red">
+                <span class="hud-controls__who" id="hud-controls-p1">Speler 1</span>
+                <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>
+                <span class="hud-controls__plus">+</span>
+                <kbd>SPATIE</kbd>
+                <span class="hud-controls__hint">houd = harder · <kbd>Q</kbd> = pass / vraag</span>
+            </div>
+            <div class="hud-controls__col hud-controls__col--blue">
+                <span class="hud-controls__who" id="hud-controls-p2">Speler 2</span>
+                <kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd>
+                <span class="hud-controls__plus">+</span>
+                <kbd>ENTER</kbd>
+                <span class="hud-controls__hint">houd = harder · <kbd>⇧</kbd> = pass / vraag</span>
+            </div>
+        </div>
+
+        <div class="kickoff-overlay" id="kickoff-overlay" hidden>
+            <div class="kickoff-overlay__num" id="kickoff-num">3</div>
+            <div class="kickoff-overlay__lbl">AFTRAP</div>
+        </div>
+
+        <div class="goal-flash" id="goal-flash" hidden>
+            <div class="goal-flash__bg"></div>
+            <div class="goal-flash__text">DOELPUNT</div>
+            <div class="goal-flash__sub" id="goal-flash-sub">SPELER 1</div>
+        </div>
+
+        <!-- pause button (top-right) -->
+        <button id="pause-btn" class="pause-btn" title="Pauze (P / ESC)" aria-label="Pauzeer">
+            <span></span><span></span>
+        </button>
+
+        <!-- pause overlay -->
+        <div id="pause-overlay" class="pause-overlay" hidden>
+            <div class="pause-overlay__panel">
+                <div class="pause-overlay__crumb">— PAUZE —</div>
+                <div class="pause-overlay__title">GEPAUZEERD</div>
+                <div class="pause-overlay__sub">Druk <kbd>P</kbd> of <kbd>ESC</kbd> om door te gaan</div>
+                <button id="pause-resume" class="cta-button cta-button--gold">
+                    <span class="cta-button__inner">
+                        <span class="cta-button__label">Hervatten</span>
+                        <span class="cta-button__arrow">▶</span>
+                    </span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ GAME OVER ============ -->
+    <div id="over-screen" class="screen">
+        <div class="over-stage">
+            <span class="crumb">FINAL · 90:00</span>
+            <h2 class="over-title" id="over-title">Eindstand</h2>
+            <div class="over-score tabular">
+                <div class="over-score__side over-score__side--red">
+                    <span class="over-score__name" id="over-p1-name">Speler 1</span>
+                    <span class="over-score__num" id="over-s1">0</span>
+                </div>
+                <span class="over-score__dash">—</span>
+                <div class="over-score__side over-score__side--blue">
+                    <span class="over-score__num" id="over-s2">0</span>
+                    <span class="over-score__name" id="over-p2-name">Speler 2</span>
+                </div>
+            </div>
+            <div class="over-winner" id="over-winner">— gelijkspel —</div>
+            <div class="over-actions">
+                <button id="play-again" class="cta-button cta-button--gold">
+                    <span class="cta-button__inner">
+                        <span class="cta-button__label">Revanche</span>
+                        <span class="cta-button__arrow">↻</span>
+                    </span>
+                </button>
+                <button id="back-home" class="ghost-btn">Naar het hoofdmenu</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>

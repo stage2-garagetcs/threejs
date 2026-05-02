@@ -1,0 +1,15 @@
+{
+  "name": "threejs",
+  "version": "1.0.0",
+  "main": "._script.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "three": "^0.169.0",
+    "three.js": "^0.77.1"
+  }
+}
