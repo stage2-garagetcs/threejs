@@ -46,9 +46,78 @@ const GOAL_H = 10;
 const PLAYER_SIZE = 5;
 const BALL_SIZE = 1.5;
 
+// ----------- stadium catalog -----------
+// Voeg je eigen stadions toe: drop een .glb in media/stadiums/ (of media/models/),
+// kopieer een entry hieronder en pas de waarden aan. De `id` is uniek en wordt
+// in localStorage opgeslagen — hergebruik nooit een id van een stadion dat al
+// eerder is uitgekozen door iemand anders, anders krijgen ze een ander stadion
+// dan ze hadden gekozen.
+//
+//   id          — slug, uniek, wordt in localStorage gezet
+//   name        — display naam (Anton-cap)
+//   sub         — kleine subtitle op de kaart (mono, ALL CAPS)
+//   tagline     — sfeerregel onder de naam
+//   file        — pad naar .glb (of null = procedureel veld zonder model)
+//   accent      — accent-kleur voor kaart-glow + dot
+//   capacity    — vrije tekst (vb '60.000', 'INTIEM', 'TBD')
+//   mood        — vrije tekst (vb 'NACHT', 'AVONDLICHT')
+//   silhouette  — 'bowl' | 'rect' | 'classic'  (welke kaart-illustratie)
+//
+// Optionele tuning-velden (default = 1.0 of 0):
+//   scaleMul    — multiplier op de auto-fit schaal (kleiner = stadion dichter
+//                 om het veld; groter = stadion verder weg)
+//   offsetY     — handmatige y-verschuiving in scene units (positief = stadion
+//                 omhoog, negatief = omlaag). Gebruik om interne pitch-hoogte
+//                 te laten matchen met y=0
+//   colorScale  — multiplier op alle base/emissive kleuren (vb 0.55 = ~half
+//                 zo licht). Goed voor day-textures die je als nacht wil
+//   rotateY     — extra y-rotatie in radians (vb Math.PI/2) als de pitch in
+//                 het model 90° gedraaid staat
+const STADIUMS = [
+    {
+        id: 'arena-nocturne',
+        name: 'Arena Nocturne',
+        sub: 'HOMETURF · MIDNIGHT',
+        tagline: 'Het hart van Pitch Royale.',
+        file: 'media/models/arena.glb',
+        accent: '#22c55e',
+        capacity: '60.000',
+        mood: 'NACHT',
+        silhouette: 'bowl',
+    },
+    {
+        id: 'camp-nou',
+        name: 'Camp Nou',
+        sub: 'AWAY · BLAUGRANA',
+        tagline: 'Honderdduizend zielen, één gezang.',
+        file: 'media/models/stadiums/camp_nou_stadium.glb',
+        accent: '#a50044',
+        capacity: '99.354',
+        mood: 'AVOND',
+        silhouette: 'bowl',
+        // tuning — daylight-baked textures; dim ~50% to match night atmosphere
+        // and shrink slightly so the model's interior pitch lines up with FIELD_W
+        scaleMul: 0.78,
+        colorScale: 0.55,
+        offsetY: 0,
+    },
+    // ↓ Voeg hier nieuwe stadions toe ↓
+];
+
+const STADIUM_STORAGE_KEY = 'pitchRoyale.stadium';
+function getSelectedStadium() {
+    let id = null;
+    try { id = localStorage.getItem(STADIUM_STORAGE_KEY); } catch (_) {}
+    return STADIUMS.find(s => s.id === id) || STADIUMS[0];
+}
+function setSelectedStadium(id) {
+    if (!STADIUMS.find(s => s.id === id)) return;
+    try { localStorage.setItem(STADIUM_STORAGE_KEY, id); } catch (_) {}
+}
+
 // ----------- DOM helpers -----------
 const $ = (id) => document.getElementById(id);
-const screens = ['loading-screen','launch-screen','setup-screen','coin-screen','game-screen','over-screen'];
+const screens = ['loading-screen','launch-screen','setup-screen','coin-screen','game-screen','over-screen','stadium-screen'];
 const SCREEN_TO_DOM = {
     loading: 'loading-screen',
     launch:  'launch-screen',
@@ -56,6 +125,7 @@ const SCREEN_TO_DOM = {
     coin:    'coin-screen',
     playing: 'game-screen',
     over:    'over-screen',
+    stadium: 'stadium-screen',
 };
 function showScreen(id) {
     screens.forEach(s => $(s)?.classList.toggle('active', s === id));
@@ -86,6 +156,8 @@ document.addEventListener('DOMContentLoaded', () => {
     bindCoin();
     bindOver();
     bindPause();
+    bindStadium();
+    updateLaunchStadiumLabel();
     window.addEventListener('keydown', (e) => {
         if (STATE.screen === 'launch' && (e.code === 'Space' || e.code === 'Enter')) {
             goToSetup();
@@ -113,13 +185,178 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ----------- LAUNCH -----------
 function bindLaunch() {
-    // the entire poster is one big call-to-action — click anywhere to enter
+    // the entire poster is one big call-to-action — click anywhere to enter…
     $('launch-screen').addEventListener('click', () => {
         if (STATE.screen === 'launch') goToSetup();
     });
+    // …except clicks on the Stadion meta-block, which open the picker instead
+    const pick = $('launch-stadium-pick');
+    pick?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.currentTarget.blur();
+        openStadiumPicker();
+    });
+}
+function updateLaunchStadiumLabel() {
+    const lbl = $('launch-stadium-name');
+    if (lbl) lbl.textContent = getSelectedStadium().name;
 }
 function goToSetup() {
     gotoScreen('setup');
+}
+
+// ----------- STADIUM PICKER -----------
+let stadiumPickerIdx = 0;
+
+function bindStadium() {
+    const prev    = $('stadium-prev');
+    const next    = $('stadium-next');
+    const back    = $('stadium-back');
+    const confirm = $('stadium-confirm');
+
+    prev?.addEventListener('click',    (e) => { e.currentTarget.blur(); navigateStadium(-1); });
+    next?.addEventListener('click',    (e) => { e.currentTarget.blur(); navigateStadium(+1); });
+    back?.addEventListener('click',    (e) => { e.currentTarget.blur(); history.back(); });
+    confirm?.addEventListener('click', (e) => {
+        e.currentTarget.blur();
+        const stadium = STADIUMS[stadiumPickerIdx];
+        if (stadium) {
+            setSelectedStadium(stadium.id);
+            updateLaunchStadiumLabel();
+        }
+        history.back();
+    });
+
+    // keyboard nav, scoped to the picker screen
+    document.addEventListener('keydown', (e) => {
+        if (STATE.screen !== 'stadium') return;
+        if (e.code === 'ArrowLeft')                       { e.preventDefault(); navigateStadium(-1); }
+        else if (e.code === 'ArrowRight')                 { e.preventDefault(); navigateStadium(+1); }
+        else if (e.code === 'Enter' || e.code === 'Space'){ e.preventDefault(); confirm?.click(); }
+        else if (e.code === 'Escape')                     { e.preventDefault(); history.back(); }
+    });
+}
+
+function openStadiumPicker() {
+    const sel = getSelectedStadium();
+    stadiumPickerIdx = STADIUMS.findIndex(s => s.id === sel.id);
+    if (stadiumPickerIdx < 0) stadiumPickerIdx = 0;
+    renderStadiumCard(stadiumPickerIdx, 0);
+    renderStadiumDots();
+    refreshStadiumArrows();
+    gotoScreen('stadium');
+}
+
+function navigateStadium(delta) {
+    if (STADIUMS.length <= 1) return;
+    stadiumPickerIdx = (stadiumPickerIdx + delta + STADIUMS.length) % STADIUMS.length;
+    renderStadiumCard(stadiumPickerIdx, delta);
+    renderStadiumDots();
+}
+
+function refreshStadiumArrows() {
+    const single = STADIUMS.length <= 1;
+    const prev = $('stadium-prev');
+    const next = $('stadium-next');
+    if (prev) prev.disabled = single;
+    if (next) next.disabled = single;
+}
+
+function renderStadiumDots() {
+    const dots = $('stadium-dots');
+    if (!dots) return;
+    dots.innerHTML = STADIUMS.map((s, i) =>
+        `<button class="stadium-dot${i === stadiumPickerIdx ? ' is-active' : ''}" `
+        + `data-idx="${i}" aria-label="${s.name}" style="--accent-card: ${s.accent};"></button>`
+    ).join('');
+    dots.querySelectorAll('.stadium-dot').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.currentTarget.blur();
+            const idx = parseInt(btn.dataset.idx, 10);
+            const dir = idx > stadiumPickerIdx ? 1 : -1;
+            stadiumPickerIdx = idx;
+            renderStadiumCard(stadiumPickerIdx, dir);
+            renderStadiumDots();
+        });
+    });
+}
+
+function renderStadiumCard(idx, dir) {
+    const card = $('stadium-card');
+    if (!card) return;
+    const stadium = STADIUMS[idx];
+    const selectedId = getSelectedStadium().id;
+    const isCurrent  = stadium.id === selectedId;
+
+    card.style.setProperty('--accent-card', stadium.accent);
+    card.dataset.silhouette = stadium.silhouette || 'bowl';
+    card.classList.toggle('is-selected', isCurrent);
+
+    card.innerHTML = `
+        <div class="stadium-card__chrome">
+            <span class="stadium-card__tag">${isCurrent ? 'GESELECTEERD' : 'OPTIE'}</span>
+            <span class="stadium-card__num tabular">${String(idx+1).padStart(2,'0')} / ${String(STADIUMS.length).padStart(2,'0')}</span>
+        </div>
+        <div class="stadium-card__art">${stadiumSilhouetteSVG(stadium)}</div>
+        <div class="stadium-card__sub">${stadium.sub}</div>
+        <h3 class="stadium-card__name">${stadium.name}</h3>
+        <p class="stadium-card__tagline">${stadium.tagline}</p>
+        <div class="stadium-card__stats">
+            <div><span class="k">Capaciteit</span><span class="v tabular">${stadium.capacity}</span></div>
+            <div><span class="k">Sfeer</span><span class="v">${stadium.mood}</span></div>
+            <div><span class="k">Type</span><span class="v">${(stadium.silhouette || 'bowl').toUpperCase()}</span></div>
+        </div>
+    `;
+
+    // re-trigger slide animation
+    card.classList.remove('slide-from-left', 'slide-from-right');
+    void card.offsetWidth;
+    if (dir > 0)      card.classList.add('slide-from-right');
+    else if (dir < 0) card.classList.add('slide-from-left');
+}
+
+function stadiumSilhouetteSVG(stadium) {
+    const acc = stadium.accent;
+    const sil = stadium.silhouette || 'bowl';
+    const initial = (stadium.name[0] || 'A').toUpperCase();
+    const gradId = `silTurf-${stadium.id}`;
+
+    // outer shell varies by silhouette type
+    let shell;
+    if (sil === 'rect') {
+        shell = `<path d="M 30 165 L 30 105 L 330 105 L 330 165 Z"
+                       fill="rgba(255,255,255,0.04)" stroke="${acc}" stroke-width="1.6" opacity="0.9"/>`;
+    } else if (sil === 'classic') {
+        shell = `<path d="M 30 165 Q 30 95 180 88 Q 330 95 330 165 Z"
+                       fill="rgba(255,255,255,0.04)" stroke="${acc}" stroke-width="1.6" opacity="0.9"/>`;
+    } else { // bowl
+        shell = `<path d="M 30 165 Q 30 110 90 110 L 270 110 Q 330 110 330 165 Z"
+                       fill="rgba(255,255,255,0.04)" stroke="${acc}" stroke-width="1.6" opacity="0.9"/>`;
+    }
+
+    return `
+    <svg viewBox="0 0 360 200" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        <defs>
+            <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stop-color="${acc}" stop-opacity="0.45"/>
+                <stop offset="100%" stop-color="${acc}" stop-opacity="0"/>
+            </linearGradient>
+        </defs>
+        <ellipse cx="180" cy="65" rx="170" ry="42" fill="url(#${gradId})"/>
+        ${shell}
+        <ellipse cx="180" cy="142" rx="120" ry="20" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.22)" stroke-width="1"/>
+        <line x1="180" y1="122" x2="180" y2="162" stroke="rgba(255,255,255,0.22)" stroke-width="0.9"/>
+        <ellipse cx="180" cy="142" rx="14" ry="4.5" fill="none" stroke="rgba(255,255,255,0.28)" stroke-width="0.9"/>
+        <g stroke="${acc}" stroke-width="1.4" opacity="0.9">
+            <line x1="50"  y1="105" x2="50"  y2="55"/>
+            <line x1="310" y1="105" x2="310" y2="55"/>
+            <circle cx="50"  cy="50" r="6" fill="${acc}"/>
+            <circle cx="310" cy="50" r="6" fill="${acc}"/>
+        </g>
+        <text x="180" y="84" text-anchor="middle"
+              fill="${acc}" opacity="0.16"
+              style="font-family: Anton, Impact, sans-serif; font-size: 80px; letter-spacing: -3px;">${initial}</text>
+    </svg>`;
 }
 
 // ----------- SETUP -----------
@@ -744,43 +981,55 @@ function buildGoals() {
 // ----------- stadium model -----------
 let stadiumLoaded = false;
 function buildStadium() {
-    if (typeof THREE.GLTFLoader !== 'function') {
-        // loader script failed — silently fall back to procedural surroundings
+    const stadium = getSelectedStadium();
+    // procedural-only entry, or loader unavailable
+    if (!stadium.file || typeof THREE.GLTFLoader !== 'function') {
         buildStadiumFallback();
         return;
     }
 
+    // per-stadium tuning (defaults preserve the old behaviour for arena.glb)
+    const scaleMul   = stadium.scaleMul   ?? 1.0;        // multiplies auto-fit
+    const offsetY    = stadium.offsetY    ?? 0;          // lift / lower after fit
+    const colorScale = stadium.colorScale ?? 1.0;        // <1 = darken textures
+    const rotateY    = stadium.rotateY    ?? 0;          // radians, useful when pitch is rotated 90°
+
     const loader = new THREE.GLTFLoader();
     loader.load(
-        'media/models/arena.glb',
+        stadium.file,
         (gltf) => {
             const arena = gltf.scene;
+            arena.rotation.y = rotateY;
 
             // auto-fit: scale arena so its longest horizontal axis covers ~2.4× field width
             const bbox = new THREE.Box3().setFromObject(arena);
             const size = bbox.getSize(new THREE.Vector3());
             const targetSpan = FIELD_W * 2.4;
             const span = Math.max(size.x, size.z);
-            const scale = span > 0.01 ? targetSpan / span : 1;
+            const scale = (span > 0.01 ? targetSpan / span : 1) * scaleMul;
             arena.scale.setScalar(scale);
 
-            // recenter & sit on the ground
+            // recenter & sit on the ground (with optional manual y nudge)
             const fitted = new THREE.Box3().setFromObject(arena);
             const center = fitted.getCenter(new THREE.Vector3());
             arena.position.x -= center.x;
             arena.position.z -= center.z;
             arena.position.y -= fitted.min.y;
+            arena.position.y += offsetY;
 
             arena.traverse((c) => {
                 if (c.isMesh) {
                     c.receiveShadow = true;
                     c.castShadow = false;
                     if (c.material) {
-                        // tone down anything overly emissive that could blow out the night look
                         const mats = Array.isArray(c.material) ? c.material : [c.material];
                         mats.forEach(m => {
+                            // tame overly emissive baked-in lighting (sun, daylight)
                             if (m.emissive && m.emissiveIntensity > 1) m.emissiveIntensity = 0.4;
+                            if (m.emissive && colorScale < 1) m.emissive.multiplyScalar(colorScale);
                             if (m.metalness !== undefined) m.metalness = Math.min(0.4, m.metalness);
+                            // optionally darken base colors (good for daylight-textured imports)
+                            if (colorScale < 1 && m.color) m.color.multiplyScalar(colorScale);
                         });
                     }
                 }
@@ -792,7 +1041,7 @@ function buildStadium() {
         },
         undefined,
         (err) => {
-            console.warn('arena.glb failed to load — falling back to procedural surroundings', err);
+            console.warn(`stadium "${stadium.id}" (${stadium.file}) failed to load — falling back to procedural surroundings`, err);
             buildStadiumFallback();
         }
     );

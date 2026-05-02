@@ -57,6 +57,17 @@
 
     <!-- ============ LAUNCH SCREEN ============ -->
     <div id="launch-screen" class="screen">
+        <!-- Aspect-locked overlay: tracks the cover-rendered poster image so we
+             can pin a real button at the exact INSTELLINGEN spot from startscherm.png -->
+        <div class="launch-poster-overlay" aria-hidden="false">
+            <!-- masks the UITSLUITEN button on startscherm.png so the KIES
+                 STADION button below sits cleanly in its place -->
+            <div class="launch-poster-mask" aria-hidden="true"></div>
+            <button id="launch-stadium-pick" class="launch-poster-btn" type="button" aria-label="Kies stadion">
+                <span class="launch-poster-btn__label">Kies stadion</span>
+                <span class="launch-poster-btn__arrow" aria-hidden="true">→</span>
+            </button>
+        </div>
         <div class="launch-prompt">Klik om te starten</div>
         <div class="floodlight floodlight--left"></div>
         <div class="floodlight floodlight--right"></div>
@@ -412,6 +423,49 @@
                         <span class="cta-button__arrow">▶</span>
                     </span>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ STADIUM PICKER ============ -->
+    <div id="stadium-screen" class="screen">
+        <div class="stadium-stage">
+            <div class="stadium-header">
+                <span class="crumb">★ / KIES JE ARENA</span>
+                <h2 class="stadium-title">Kies je <em>stadion</em></h2>
+                <p class="stadium-sub">Waar zal de wedstrijd vanavond plaatsvinden?</p>
+            </div>
+
+            <div class="stadium-slider">
+                <button id="stadium-prev" class="stadium-arrow stadium-arrow--prev" aria-label="Vorig stadion">
+                    <span aria-hidden="true">◀</span>
+                </button>
+
+                <article id="stadium-card" class="stadium-card" aria-live="polite">
+                    <!-- populated by JS in renderStadiumCard -->
+                </article>
+
+                <button id="stadium-next" class="stadium-arrow stadium-arrow--next" aria-label="Volgend stadion">
+                    <span aria-hidden="true">▶</span>
+                </button>
+            </div>
+
+            <div id="stadium-dots" class="stadium-dots" role="tablist" aria-label="Stadions"></div>
+
+            <div class="stadium-actions">
+                <button id="stadium-confirm" class="cta-button cta-button--gold">
+                    <span class="cta-button__inner">
+                        <span class="cta-button__label">Bevestig stadion</span>
+                        <span class="cta-button__arrow">→</span>
+                    </span>
+                </button>
+                <button id="stadium-back" class="ghost-btn">Terug</button>
+            </div>
+
+            <div class="stadium-keyhints">
+                <span><kbd>←</kbd><kbd>→</kbd> bladeren</span>
+                <span><kbd>ENTER</kbd> kiezen</span>
+                <span><kbd>ESC</kbd> terug</span>
             </div>
         </div>
     </div>
