@@ -43,8 +43,8 @@ const FIELD_W = 110;
 const FIELD_L = 70;
 const GOAL_W = 22;
 const GOAL_H = 10;
-const PLAYER_SIZE = 5;
-const BALL_SIZE = 1.5;
+const PLAYER_SIZE = 3.4;
+const BALL_SIZE = 1.05;
 
 // ----------- stadium catalog -----------
 // Voeg je eigen stadions toe: drop een .glb in media/stadiums/ (of media/models/),
@@ -86,6 +86,11 @@ const BALL_SIZE = 1.5;
 //                 stadiongras zichtbaar is.
 //   pitchBrighten — gameplay-only: extra multiplier op de pitch-mesh kleur
 //                 (default 1.0). Handig als de GLB-pitch erg donker is.
+//   gameplayScale — extra gameplay-only schaal na pitch-fit; >1 maakt het
+//                 geïmporteerde stadion groter en dramatischer in beeld
+//   cameraPos/cameraLookAt/cameraFov — gameplay camera per stadion
+//   cameraCutaway — gameplay-only: verberg import-meshes aan de camerakant
+//                 zodat een dak/tribune niet voor het speelveld hangt
 const STADIUMS = [
     {
         id: 'arena-nocturne',
@@ -118,7 +123,12 @@ const STADIUMS = [
         offsetY: 0,
         nativePitch: true,
         pitchBrighten: 1.55,
-        cutawayFrontZ: FIELD_L / 2 + 6,
+        cutawayFrontZ: FIELD_L / 2 + 2,
+        gameplayScale: 1.34,
+        cameraPos: [-78, 92, 78],
+        cameraLookAt: [0, 0, 0],
+        cameraFov: 46,
+        cameraCutaway: true,
     },
     {
         id: 'old-trafford',
@@ -136,7 +146,12 @@ const STADIUMS = [
         offsetY: 0,
         nativePitch: true,
         pitchBrighten: 1.55,
-        cutawayFrontZ: FIELD_L / 2 + 6,
+        cutawayFrontZ: FIELD_L / 2 + 2,
+        gameplayScale: 1.32,
+        cameraPos: [-78, 92, 78],
+        cameraLookAt: [0, 0, 0],
+        cameraFov: 46,
+        cameraCutaway: true,
     },
     // ↓ Voeg hier nieuwe stadions toe ↓
 ];
@@ -767,9 +782,7 @@ function bindSetup() {
     const submit = $('to-coin');
 
     const refreshSubmit = () => {
-        const p1ok = p1Input.value.trim().length >= 2;
-        const p2ok = STATE.mode === 'cpu' || p2Input.value.trim().length >= 2;
-        submit.disabled = !(p1ok && p2ok);
+        submit.disabled = false;
     };
     // toggle a `has-value` class on the wrapper for browsers without :has()
     const reflectValue = (inp) => {
@@ -1078,7 +1091,7 @@ function initThree() {
         scene = new THREE.Scene();
         scene.fog = new THREE.Fog(COLORS.fogColor, 130, 320);
 
-        camera = new THREE.PerspectiveCamera(54, window.innerWidth / window.innerHeight, 0.1, 800);
+        camera = new THREE.PerspectiveCamera(44, window.innerWidth / window.innerHeight, 0.1, 1000);
 
         renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
         // cap pixel ratio harder — Retina at 2× quadruples GPU work for marginal gain
@@ -1123,9 +1136,7 @@ function initThree() {
     buildBall();
     positionForKickoff();
 
-    // cinematic angle
-    camera.position.set(0, 62, 88);
-    camera.lookAt(0, 4, 0);
+    applyGameplayCamera();
 
     // reset fixed-step bookkeeping
     physicsAccum = 0;
@@ -1137,6 +1148,17 @@ function initThree() {
 
     if (animationId) cancelAnimationFrame(animationId);
     animationId = requestAnimationFrame(animate);
+}
+
+function applyGameplayCamera() {
+    const stadium = getSelectedStadium();
+    const pos = stadium.cameraPos || [0, 62, 88];
+    const look = stadium.cameraLookAt || [0, 4, 0];
+    camera.fov = stadium.cameraFov || 54;
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.position.set(pos[0], pos[1], pos[2]);
+    camera.lookAt(look[0], look[1], look[2]);
+    camera.updateProjectionMatrix();
 }
 
 function buildSky() {
@@ -1339,6 +1361,8 @@ function buildField() {
 }
 
 function buildGoals() {
+    if (getSelectedStadium()?.nativePitch) return;
+
     const postMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.6, roughness: 0.3 });
     const netMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 });
 
@@ -1416,6 +1440,7 @@ function buildStadium() {
     const cutawayFrontZ = stadium.cutawayFrontZ ?? null; // hide near-side GLB pieces in camera corridor
     const nativePitch = stadium.nativePitch === true;    // use the GLB's own pitch (no dimming)
     const pitchBrighten = stadium.pitchBrighten ?? 1.0;  // extra multiplier on pitch base color
+    const gameplayScale = stadium.gameplayScale ?? 1.0;  // make imported stadiums feel larger in-game
 
     const loader = new THREE.GLTFLoader();
     loader.load(
@@ -1424,22 +1449,56 @@ function buildStadium() {
             const arena = gltf.scene;
             arena.rotation.y = rotateY;
 
-            // auto-fit: scale arena so its longest horizontal axis covers ~2.4× field width
+            // Step 1 — rough auto-fit so the longest horizontal span of the
+            // import covers ~2.4× our gameplay width. Gets us into the right
+            // ballpark for stadiums that don't use nativePitch.
+            arena.updateMatrixWorld(true);
             const bbox = new THREE.Box3().setFromObject(arena);
             const size = bbox.getSize(new THREE.Vector3());
             const targetSpan = FIELD_W * 2.4;
             const span = Math.max(size.x, size.z);
-            const scale = (span > 0.01 ? targetSpan / span : 1) * scaleMul;
-            arena.scale.setScalar(scale);
+            const initialScale = (span > 0.01 ? targetSpan / span : 1) * scaleMul;
+            arena.scale.setScalar(initialScale);
 
-            // recenter & sit on the ground (with optional manual y nudge)
-            const fitted = new THREE.Box3().setFromObject(arena);
-            const center = fitted.getCenter(new THREE.Vector3());
-            arena.position.x -= center.x;
-            arena.position.z -= center.z;
-            arena.position.y -= fitted.min.y;
+            // Step 2 — when the GLB's own pitch IS the gameplay surface,
+            // refine the scale so the imported pitch matches FIELD_W × FIELD_L
+            // (with a small margin), then recenter on the *pitch* center and
+            // park the grass surface at world y ≈ 0. Without this the players
+            // and goals end up as figurines floating in the middle of a much
+            // larger imported pitch.
+            let pitchBox = nativePitch ? findGLBPitchBox(arena) : null;
+            if (pitchBox) {
+                const ps = pitchBox.getSize(new THREE.Vector3());
+                const targetPitchW = FIELD_W * 1.05;
+                const targetPitchL = FIELD_L * 1.05;
+                const correction = Math.min(targetPitchW / ps.x, targetPitchL / ps.z);
+                if (Number.isFinite(correction) && correction > 0 && Math.abs(correction - 1) > 0.02) {
+                    arena.scale.multiplyScalar(correction);
+                    arena.updateMatrixWorld(true);
+                    pitchBox = findGLBPitchBox(arena); // refresh after rescale
+                }
+            }
+
+            // Step 3 — recenter & place
+            arena.updateMatrixWorld(true);
+            if (nativePitch && pitchBox) {
+                const pcenter = pitchBox.getCenter(new THREE.Vector3());
+                arena.position.x -= pcenter.x;
+                arena.position.z -= pcenter.z;
+                arena.position.y -= pitchBox.max.y; // pitch top surface sits at y ≈ 0
+            } else {
+                const fitted = new THREE.Box3().setFromObject(arena);
+                const center = fitted.getCenter(new THREE.Vector3());
+                arena.position.x -= center.x;
+                arena.position.z -= center.z;
+                arena.position.y -= fitted.min.y;
+            }
             arena.position.y += offsetY;
             arena.position.y -= sinkY;
+            if (gameplayScale !== 1.0) {
+                arena.scale.multiplyScalar(gameplayScale);
+                arena.position.multiplyScalar(gameplayScale);
+            }
 
             arena.traverse((c) => {
                 if (!c.isMesh) return;
@@ -1450,7 +1509,9 @@ function buildStadium() {
                 //  - if cutawayFrontZ removes near-side stands blocking camera
                 if (
                     (fieldCutout && isPitchMesh) ||
-                    shouldHideImportedFrontMesh(c, cutawayFrontZ)
+                    shouldHideImportedFrontMesh(c, cutawayFrontZ) ||
+                    shouldHideCameraSideMesh(c, stadium) ||
+                    shouldHideImportedUndersideBar(c, stadium)
                 ) {
                     c.visible = false;
                     return;
@@ -1496,11 +1557,80 @@ function buildStadium() {
     buildStadiumFallback();
 }
 
+// Translation-invariant pitch finder — used during auto-fit when the GLB
+// hasn't been recentered yet. We score every flat-low candidate mesh and
+// pick the SINGLE best one. The previous version unioned everything that
+// looked vaguely pitch-y, which on Camp Nou ate the entire stadium floor
+// and shrunk the model to a miniature.
+//
+// Scoring favours:
+//  - meshes whose name actually contains pitch/field/grass/turf
+//  - meshes whose width:length ratio is football-like (~1.5)
+//  - meshes that are roughly centred in the stadium footprint
+//  - moderate size (not vanishingly small, not bigger than a real pitch)
+function findGLBPitchBox(arena) {
+    arena.updateMatrixWorld(true);
+    const importBbox = new THREE.Box3().setFromObject(arena);
+    if (importBbox.isEmpty()) return null;
+    const importHeight = Math.max(0.001, importBbox.max.y - importBbox.min.y);
+    const importSize = importBbox.getSize(new THREE.Vector3());
+    const importCenter = importBbox.getCenter(new THREE.Vector3());
+    const importSpan = Math.max(importSize.x, importSize.z) || 1;
+
+    const candidates = [];
+    arena.traverse((c) => {
+        if (!c.isMesh) return;
+        const b = new THREE.Box3().setFromObject(c);
+        if (b.isEmpty()) return;
+        const s = b.getSize(new THREE.Vector3());
+        if (s.x < 20 || s.z < 20) return;
+        if (s.y > Math.max(4, Math.min(s.x, s.z) * 0.08)) return; // not flat
+        const yFromBottom = b.min.y - importBbox.min.y;
+        if (yFromBottom > importHeight * 0.22) return; // not low
+
+        const longer  = Math.max(s.x, s.z);
+        const shorter = Math.min(s.x, s.z);
+        const ratio   = longer / shorter;
+        // football pitches sit between 1.0 and 1.7 — aggressively reject
+        // square parking surfaces and elongated walkways
+        if (ratio > 1.95) return;
+
+        const center = b.getCenter(new THREE.Vector3());
+        const offX = (center.x - importCenter.x) / importSize.x;
+        const offZ = (center.z - importCenter.z) / importSize.z;
+        const offCenter = Math.hypot(offX, offZ);
+        // anything wildly off-centre is almost certainly not the pitch
+        if (offCenter > 0.20) return;
+
+        const namedAsPitch = /(^|[_\s\-/])(pitch|field|grass|turf)([_\s\-/]|$)/i.test(c.name || '');
+        // size relative to the whole stadium — pitches are usually 30–55% of
+        // the stadium's longest axis. Penalise meshes outside that band.
+        const sizeFrac = longer / importSpan;
+
+        let score = 0;
+        score += namedAsPitch ? 0 : 100;          // huge bonus for name match
+        score += Math.abs(ratio - 1.54) * 40;     // football ratio target
+        score += offCenter * 30;                  // central preference
+        score += Math.abs(sizeFrac - 0.42) * 25;  // expected ~42% of stadium span
+        candidates.push({ box: b.clone(), score, namedAsPitch, ratio, sizeFrac });
+    });
+
+    if (!candidates.length) return null;
+
+    // strongest signal: an explicit pitch/field/grass/turf name. If any
+    // candidate has it, only consider those — geometry voodoo can't beat a
+    // model that already knows what it is.
+    const named = candidates.filter(c => c.namedAsPitch);
+    const pool  = named.length ? named : candidates;
+    pool.sort((a, b) => a.score - b.score);
+    return pool[0].box.clone();
+}
+
 // Detect whether a mesh inside the imported GLB looks like the stadium pitch
 // (broad, low to the ground, near the gameplay rectangle, or simply named like
 // a pitch).  Used both to hide the import-pitch when we want our procedural
 // rectangle, and to keep the import-pitch bright when we use it as the
-// gameplay surface.
+// gameplay surface.  Assumes the GLB is already recentered around the origin.
 function looksLikePitchMesh(mesh) {
     const box = new THREE.Box3().setFromObject(mesh);
     if (box.isEmpty()) return false;
@@ -1529,10 +1659,54 @@ function shouldHideImportedFrontMesh(mesh, cutawayFrontZ) {
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     const inFrontOfPitch = box.min.z > cutawayFrontZ;
-    const lowEnoughToBlockPlay = box.min.y < 35 && center.y < 45;
-    const notTinyDetail = Math.max(size.x, size.z) > 8;
+    const overlapsBroadcastFrame =
+        box.max.x > -FIELD_W / 2 - 35 &&
+        box.min.x <  FIELD_W / 2 + 35;
+    const lowOrMassiveEnoughToBlockPlay = box.min.y < 80 && center.y < 95;
+    const notTinyDetail = Math.max(size.x, size.z) > 6;
 
-    return inFrontOfPitch && lowEnoughToBlockPlay && notTinyDetail;
+    return inFrontOfPitch && overlapsBroadcastFrame && lowOrMassiveEnoughToBlockPlay && notTinyDetail;
+}
+
+function shouldHideCameraSideMesh(mesh, stadium) {
+    if (!stadium.cameraCutaway || !stadium.cameraPos) return false;
+    const box = new THREE.Box3().setFromObject(mesh);
+    if (box.isEmpty()) return false;
+
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const cam = new THREE.Vector3(stadium.cameraPos[0], 0, stadium.cameraPos[2]);
+    if (cam.lengthSq() < 1) return false;
+    const dir = cam.normalize();
+
+    const cameraSide = center.x * dir.x + center.z * dir.z;
+    const blocksFieldView = cameraSide > FIELD_L * 0.42;
+    const lowOrHuge = box.min.y < 95 && center.y < 115;
+    const largeEnough = Math.max(size.x, size.z) > 10;
+    const notPitch = !looksLikePitchMesh(mesh);
+
+    return blocksFieldView && lowOrHuge && largeEnough && notPitch;
+}
+
+function shouldHideImportedUndersideBar(mesh, stadium) {
+    if (!stadium.nativePitch || !stadium.cameraPos) return false;
+    if (looksLikePitchMesh(mesh)) return false;
+
+    const box = new THREE.Box3().setFromObject(mesh);
+    if (box.isEmpty()) return false;
+
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const cam = new THREE.Vector3(stadium.cameraPos[0], 0, stadium.cameraPos[2]);
+    if (cam.lengthSq() < 1) return false;
+    const dir = cam.normalize();
+    const cameraSide = center.x * dir.x + center.z * dir.z;
+
+    const isLongBar = Math.max(size.x, size.z) > FIELD_W * 0.55 && Math.min(size.x, size.z) > 3;
+    const sitsUnderGameplay = box.min.y < 2 && center.y < 28;
+    const onCameraHalf = cameraSide > 0;
+
+    return isLongBar && sitsUnderGameplay && onCameraHalf;
 }
 
 function buildStadiumFallback() {
@@ -1746,8 +1920,7 @@ function positionForKickoff() {
 
 function onResize() {
     if (!camera || !renderer) return;
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
+    applyGameplayCamera();
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
