@@ -73,6 +73,19 @@ const BALL_SIZE = 1.5;
 //                 zo licht). Goed voor day-textures die je als nacht wil
 //   rotateY     — extra y-rotatie in radians (vb Math.PI/2) als de pitch in
 //                 het model 90° gedraaid staat
+//   fieldCutout  — gameplay-only: verberg lage GLB-meshes in het speelveld,
+//                 zodat ons eigen veld/spelers zichtbaar blijven zoals bij
+//                 de procedurele arena
+//   sinkY       — gameplay-only: laat de import iets onder het speelvlak zakken
+//   cutawayFrontZ — gameplay-only: verberg voorste import-delen die tussen de
+//                 vaste camera en het speelveld zitten
+//   nativePitch — gameplay-only: gebruik het veld uit de .glb zelf in plaats
+//                 van onze procedurele groene rechthoek. Verbergt automatisch
+//                 onze plaat/border/lijnen en brengt de pitch-meshes in de
+//                 GLB op vol kleur (geen colorScale-dimming) zodat het echte
+//                 stadiongras zichtbaar is.
+//   pitchBrighten — gameplay-only: extra multiplier op de pitch-mesh kleur
+//                 (default 1.0). Handig als de GLB-pitch erg donker is.
 const STADIUMS = [
     {
         id: 'arena-nocturne',
@@ -88,18 +101,42 @@ const STADIUMS = [
     {
         id: 'camp-nou',
         name: 'Camp Nou',
-        sub: 'AWAY · BLAUGRANA',
-        tagline: 'Honderdduizend zielen, één gezang.',
+        sub: 'HOME · BLAUGRANA',
+        tagline: 'Més que un club.',
         file: 'media/models/stadiums/camp_nou_stadium.glb',
         accent: '#a50044',
         capacity: '99.354',
         mood: 'AVOND',
         silhouette: 'bowl',
         // tuning — daylight-baked textures; dim ~50% to match night atmosphere
-        // and shrink slightly so the model's interior pitch lines up with FIELD_W
+        // and shrink slightly so the model's interior pitch lines up with FIELD_W.
+        // We show the *real* baked pitch from the GLB instead of stamping our
+        // flat green plane on top — the procedural rectangle was reading as a
+        // sticker glued onto the stadium.
         scaleMul: 0.78,
         colorScale: 0.55,
         offsetY: 0,
+        nativePitch: true,
+        pitchBrighten: 1.55,
+        cutawayFrontZ: FIELD_L / 2 + 6,
+    },
+    {
+        id: 'old-trafford',
+        name: 'Old Trafford',
+        sub: 'HOME · RED DEVILS',
+        tagline: 'The Theatre of Dreams.',
+        file: 'media/models/stadiums/old_trafford.glb',
+        accent: '#da291c',
+        capacity: '74.310',
+        mood: 'AVOND',
+        silhouette: 'classic',
+        // same pipeline as Camp Nou: native imported pitch, dimmed stands.
+        scaleMul: 0.78,
+        colorScale: 0.55,
+        offsetY: 0,
+        nativePitch: true,
+        pitchBrighten: 1.55,
+        cutawayFrontZ: FIELD_L / 2 + 6,
     },
     // ↓ Voeg hier nieuwe stadions toe ↓
 ];
@@ -1209,6 +1246,23 @@ function makeStripeTexture() {
 }
 
 function buildField() {
+    const stadium = getSelectedStadium();
+    // When the selected stadium provides its own baked pitch (Camp Nou,
+    // Old Trafford, etc.) we don't want to slap our flat green plane on top —
+    // that's the "sticker on a stadium" look we just got rid of.  Render only
+    // an invisible shadow-receiver so player shadows still land somewhere, and
+    // let the imported GLB pitch + line markings shine through.
+    if (stadium?.nativePitch) {
+        const shadowGeo = new THREE.PlaneGeometry(FIELD_W + 40, FIELD_L + 30);
+        const shadowMat = new THREE.ShadowMaterial({ opacity: 0.32 });
+        const shadowPlane = new THREE.Mesh(shadowGeo, shadowMat);
+        shadowPlane.rotation.x = -Math.PI / 2;
+        shadowPlane.position.y = 0.02;
+        shadowPlane.receiveShadow = true;
+        scene.add(shadowPlane);
+        return;
+    }
+
     const stripe = makeStripeTexture();
     const fieldGeo = new THREE.PlaneGeometry(FIELD_W, FIELD_L);
     const fieldMat = new THREE.MeshStandardMaterial({
@@ -1357,6 +1411,11 @@ function buildStadium() {
     const offsetY    = stadium.offsetY    ?? 0;          // lift / lower after fit
     const colorScale = stadium.colorScale ?? 1.0;        // <1 = darken textures
     const rotateY    = stadium.rotateY    ?? 0;          // radians, useful when pitch is rotated 90°
+    const sinkY      = stadium.sinkY      ?? 0;          // lower imports below our gameplay field
+    const fieldCutout = stadium.fieldCutout === true;    // hide imported pitch/flat centre meshes
+    const cutawayFrontZ = stadium.cutawayFrontZ ?? null; // hide near-side GLB pieces in camera corridor
+    const nativePitch = stadium.nativePitch === true;    // use the GLB's own pitch (no dimming)
+    const pitchBrighten = stadium.pitchBrighten ?? 1.0;  // extra multiplier on pitch base color
 
     const loader = new THREE.GLTFLoader();
     loader.load(
@@ -1380,23 +1439,45 @@ function buildStadium() {
             arena.position.z -= center.z;
             arena.position.y -= fitted.min.y;
             arena.position.y += offsetY;
+            arena.position.y -= sinkY;
 
             arena.traverse((c) => {
-                if (c.isMesh) {
-                    c.receiveShadow = true;
-                    c.castShadow = false;
-                    if (c.material) {
-                        const mats = Array.isArray(c.material) ? c.material : [c.material];
-                        mats.forEach(m => {
-                            // tame overly emissive baked-in lighting (sun, daylight)
-                            if (m.emissive && m.emissiveIntensity > 1) m.emissiveIntensity = 0.4;
-                            if (m.emissive && colorScale < 1) m.emissive.multiplyScalar(colorScale);
-                            if (m.metalness !== undefined) m.metalness = Math.min(0.4, m.metalness);
-                            // optionally darken base colors (good for daylight-textured imports)
-                            if (colorScale < 1 && m.color) m.color.multiplyScalar(colorScale);
-                        });
-                    }
+                if (!c.isMesh) return;
+                const isPitchMesh = looksLikePitchMesh(c);
+
+                // hide unwanted meshes:
+                //  - if fieldCutout is on (legacy: replace GLB pitch with our own)
+                //  - if cutawayFrontZ removes near-side stands blocking camera
+                if (
+                    (fieldCutout && isPitchMesh) ||
+                    shouldHideImportedFrontMesh(c, cutawayFrontZ)
+                ) {
+                    c.visible = false;
+                    return;
                 }
+                c.receiveShadow = true;
+                c.castShadow = false;
+                if (!c.material) return;
+
+                const mats = Array.isArray(c.material) ? c.material : [c.material];
+                mats.forEach(m => {
+                    // tame overly emissive baked-in lighting (sun, daylight)
+                    if (m.emissive && m.emissiveIntensity > 1) m.emissiveIntensity = 0.4;
+                    if (m.metalness !== undefined) m.metalness = Math.min(0.4, m.metalness);
+
+                    // when the imported pitch IS the gameplay surface, keep it
+                    // bright (skip the night-tint dimming that's meant for the
+                    // stands) and optionally boost it a little so the grass pops.
+                    if (nativePitch && isPitchMesh) {
+                        if (pitchBrighten !== 1.0 && m.color) m.color.multiplyScalar(pitchBrighten);
+                        m.roughness = Math.max(0.85, m.roughness ?? 1);
+                        return;
+                    }
+
+                    // dim stands / roof / signage to match our night atmosphere
+                    if (m.emissive && colorScale < 1) m.emissive.multiplyScalar(colorScale);
+                    if (colorScale < 1 && m.color) m.color.multiplyScalar(colorScale);
+                });
             });
 
             arena.userData.tag = 'stadium';
@@ -1413,6 +1494,45 @@ function buildStadium() {
     // always render the fallback bowl too — it sits below the imported model
     // so we always have *something* if the GLB is small/transparent in spots.
     buildStadiumFallback();
+}
+
+// Detect whether a mesh inside the imported GLB looks like the stadium pitch
+// (broad, low to the ground, near the gameplay rectangle, or simply named like
+// a pitch).  Used both to hide the import-pitch when we want our procedural
+// rectangle, and to keep the import-pitch bright when we use it as the
+// gameplay surface.
+function looksLikePitchMesh(mesh) {
+    const box = new THREE.Box3().setFromObject(mesh);
+    if (box.isEmpty()) return false;
+
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const overlapsPitch =
+        box.max.x > -FIELD_W / 2 - 6 &&
+        box.min.x <  FIELD_W / 2 + 6 &&
+        box.max.z > -FIELD_L / 2 - 6 &&
+        box.min.z <  FIELD_L / 2 + 6;
+    if (!overlapsPitch) return false;
+
+    const lowToGround = box.min.y < 5 && center.y < 8;
+    const broadFlat = size.y < 3 && size.x > FIELD_W * 0.18 && size.z > FIELD_L * 0.18;
+    const namedAsPitch = /pitch|field|grass|turf|ground|plane/i.test(mesh.name || '');
+
+    return lowToGround && (broadFlat || namedAsPitch);
+}
+
+function shouldHideImportedFrontMesh(mesh, cutawayFrontZ) {
+    if (cutawayFrontZ === null) return false;
+    const box = new THREE.Box3().setFromObject(mesh);
+    if (box.isEmpty()) return false;
+
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const inFrontOfPitch = box.min.z > cutawayFrontZ;
+    const lowEnoughToBlockPlay = box.min.y < 35 && center.y < 45;
+    const notTinyDetail = Math.max(size.x, size.z) > 8;
+
+    return inFrontOfPitch && lowEnoughToBlockPlay && notTinyDetail;
 }
 
 function buildStadiumFallback() {

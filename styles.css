@@ -2056,7 +2056,7 @@ kbd {
     height: 80%;
     display: block;
 }
-.stadium-card__viewer.is-ready .stadium-card__viewer-fallback { opacity: 0.16; }
+.stadium-card__viewer.is-ready .stadium-card__viewer-fallback { opacity: 0; }
 .stadium-card__viewer.is-failed .stadium-card__viewer-fallback,
 .stadium-card__viewer.is-unsupported .stadium-card__viewer-fallback { opacity: 1; }
 
@@ -2448,6 +2448,7 @@ kbd {
     .stadium-viewport__chrome--tr { right: 18px; }
     .stadium-viewport__chrome--bl { left: 18px; font-size: 0.6rem; }
     .stadium-viewport__chrome--br { right: 18px; }
+    .stadium-viewport__chrome--br { display: none; }
     .stadium-viewport__brackets .b { width: 18px; height: 18px; }
     .stadium-footnav { grid-template-columns: 1fr; gap: 0.6rem; justify-items: center; }
     .stadium-nav__sub { display: none; }
@@ -2466,10 +2467,5 @@ kbd {
     .hud-controls { flex-direction: column; gap: 8px; }
     .over-score { gap: 0.5rem; flex-direction: column; }
     .over-score__dash { transform: rotate(90deg); }
-    .stadium-slider { gap: 0.6rem; }
-    .stadium-arrow { width: 44px; height: 44px; }
-    .stadium-card { padding: 1.2rem; }
-    .stadium-card__stats { grid-template-columns: 1fr 1fr; }
-    .stadium-card__stats > div:nth-child(3) { grid-column: span 2; }
     .stadium-keyhints { display: none; }
 }
