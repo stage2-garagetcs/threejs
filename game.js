@@ -111,9 +111,9 @@ const STADIUMS = [
         colorScale: 0.55,
         offsetY: 0,
         nativePitch: true,
-        pitchBrighten: 1.55,
-        cutawayFrontZ: FIELD_L / 2 + 2,
-        gameplayScale: 1.34,
+        pitchBrighten: 1.9,
+        cutawayFrontZ: null,
+        gameplayScale: 1.0,
         cameraPos: [0, 72, 78],
         cameraLookAt: [0, 0, 0],
         cameraFov: 58,
@@ -134,9 +134,58 @@ const STADIUMS = [
         colorScale: 0.55,
         offsetY: 0,
         nativePitch: true,
-        pitchBrighten: 1.55,
-        cutawayFrontZ: FIELD_L / 2 + 2,
-        gameplayScale: 1.32,
+        pitchBrighten: 1.9,
+        cutawayFrontZ: null,
+        gameplayScale: 1.0,
+        // Old Trafford GLB's pitch ends up offset ~15 units to the right of
+        // world origin after auto-fit, so we shift the broadcast cam left to
+        // re-frame: pitch lands centered, both goals stay in view.
+        cameraPos: [-15, 72, 78],
+        cameraLookAt: [-15, 0, 0],
+        cameraFov: 58,
+        cameraCutaway: false,
+    },
+    {
+        id: 'anfield',
+        name: 'Anfield',
+        sub: 'HOME · THE KOP',
+        tagline: "You'll Never Walk Alone.",
+        file: 'media/models/stadiums/ANFIELD STADIUM.glb',
+        accent: '#c8102e',
+        capacity: '54.074',
+        mood: 'NACHT',
+        silhouette: 'classic',
+        // same pipeline as Camp Nou / Old Trafford: native imported pitch,
+        // dimmed stands, no front-mesh cutaway.
+        scaleMul: 0.78,
+        colorScale: 0.55,
+        offsetY: 0,
+        nativePitch: true,
+        pitchBrighten: 1.9,
+        cutawayFrontZ: null,
+        gameplayScale: 1.0,
+        cameraPos: [0, 72, 78],
+        cameraLookAt: [0, 0, 0],
+        cameraFov: 58,
+        cameraCutaway: false,
+    },
+    {
+        id: 'etihad',
+        name: 'Etihad Stadium',
+        sub: 'HOME · CITIZENS',
+        tagline: 'Welcome to the new home of City.',
+        file: 'media/models/stadiums/ETIHAD STADIUM.glb',
+        accent: '#6cabdd',
+        capacity: '53.400',
+        mood: 'AVOND',
+        silhouette: 'bowl',
+        scaleMul: 0.78,
+        colorScale: 0.55,
+        offsetY: 0,
+        nativePitch: true,
+        pitchBrighten: 1.9,
+        cutawayFrontZ: null,
+        gameplayScale: 1.0,
         cameraPos: [0, 72, 78],
         cameraLookAt: [0, 0, 0],
         cameraFov: 58,
@@ -1530,6 +1579,13 @@ function buildStadium() {
                     if (nativePitch && isPitchMesh) {
                         if (pitchBrighten !== 1.0 && m.color) m.color.multiplyScalar(pitchBrighten);
                         m.roughness = Math.max(0.85, m.roughness ?? 1);
+                        // kill baked-in daylight shadows (lightmap + AO) so floodlight
+                        // tower silhouettes from the original render don't show up
+                        // as dark patches on our night-time pitch
+                        if (m.lightMap) m.lightMapIntensity = 0;
+                        if (m.aoMap) m.aoMapIntensity = 0;
+                        if (m.emissive) m.emissiveIntensity = 0;
+                        m.needsUpdate = true;
                         return;
                     }
 
