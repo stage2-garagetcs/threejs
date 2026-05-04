@@ -32,10 +32,10 @@ const COLORS = {
     team2Hot:     0x6da4ff,
     skin:         0xe2c39a,
     keeperBand:   0xf0c14a,
-    skyTop:       0x05070d,
-    skyMid:       0x111935,
-    skyBottom:    0x223060,
-    fogColor:     0x05070d,
+    skyTop:       0x000000,
+    skyMid:       0x040406,
+    skyBottom:    0x000000,
+    fogColor:     0x000000,
 };
 
 // ----------- field constants -----------
@@ -93,17 +93,6 @@ const BALL_SIZE = 1.05;
 //                 zodat een dak/tribune niet voor het speelveld hangt
 const STADIUMS = [
     {
-        id: 'arena-nocturne',
-        name: 'Arena Nocturne',
-        sub: 'HOMETURF · MIDNIGHT',
-        tagline: 'Het hart van Pitch Royale.',
-        file: 'media/models/arena.glb',
-        accent: '#22c55e',
-        capacity: '60.000',
-        mood: 'NACHT',
-        silhouette: 'bowl',
-    },
-    {
         id: 'camp-nou',
         name: 'Camp Nou',
         sub: 'HOME · BLAUGRANA',
@@ -125,10 +114,10 @@ const STADIUMS = [
         pitchBrighten: 1.55,
         cutawayFrontZ: FIELD_L / 2 + 2,
         gameplayScale: 1.34,
-        cameraPos: [-78, 92, 78],
+        cameraPos: [0, 72, 78],
         cameraLookAt: [0, 0, 0],
-        cameraFov: 46,
-        cameraCutaway: true,
+        cameraFov: 58,
+        cameraCutaway: false,
     },
     {
         id: 'old-trafford',
@@ -148,10 +137,10 @@ const STADIUMS = [
         pitchBrighten: 1.55,
         cutawayFrontZ: FIELD_L / 2 + 2,
         gameplayScale: 1.32,
-        cameraPos: [-78, 92, 78],
+        cameraPos: [0, 72, 78],
         cameraLookAt: [0, 0, 0],
-        cameraFov: 46,
-        cameraCutaway: true,
+        cameraFov: 58,
+        cameraCutaway: false,
     },
     // ↓ Voeg hier nieuwe stadions toe ↓
 ];
@@ -1131,7 +1120,7 @@ function initThree() {
     buildLights();
     buildField();
     buildGoals();
-    buildStadium();        // imports media/models/arena.glb
+    buildStadium();        // imports the .glb of the selected stadium
     buildPlayers();
     buildBall();
     positionForKickoff();
@@ -1194,14 +1183,14 @@ function buildSky() {
 }
 
 function buildLights() {
-    scene.add(new THREE.AmbientLight(0x4a557a, 0.45));
+    scene.add(new THREE.AmbientLight(0x3a3a3a, 0.45));
 
-    // hemisphere wash — sky tint above, deep ground below
-    const hemi = new THREE.HemisphereLight(0x6f7fb8, 0x10141f, 0.55);
+    // hemisphere wash — neutral above, deep ground below (no blue night-tint)
+    const hemi = new THREE.HemisphereLight(0x5a5a5a, 0x0a0a0a, 0.55);
     scene.add(hemi);
 
-    // primary directional fill (replaces the harsher key)
-    const fill = new THREE.DirectionalLight(0xc8d2ee, 0.35);
+    // primary directional fill (replaces the harsher key) — warm white, no blue
+    const fill = new THREE.DirectionalLight(0xeae0c8, 0.35);
     fill.position.set(0, 120, 30);
     scene.add(fill);
 
@@ -1282,6 +1271,15 @@ function buildField() {
         shadowPlane.position.y = 0.02;
         shadowPlane.receiveShadow = true;
         scene.add(shadowPlane);
+
+        // dark concrete plane far outside the stadium so any gap in the import
+        // (cutaways, missing back wall) reads as ground instead of black void
+        const outerGeo = new THREE.PlaneGeometry(2000, 2000);
+        const outerMat = new THREE.MeshStandardMaterial({ color: 0x05060a, roughness: 1.0, metalness: 0.0 });
+        const outer = new THREE.Mesh(outerGeo, outerMat);
+        outer.rotation.x = -Math.PI / 2;
+        outer.position.y = -0.6;
+        scene.add(outer);
         return;
     }
 
@@ -1713,7 +1711,7 @@ function buildStadiumFallback() {
     // a low concrete bowl + tribunes silhouette so the world doesn't feel empty
     const bowlGeo = new THREE.RingGeometry(FIELD_W * 0.85, FIELD_W * 1.6, 64, 1);
     const bowlMat = new THREE.MeshStandardMaterial({
-        color: 0x171b2c,
+        color: 0x0a0a0a,
         roughness: 1.0,
         metalness: 0.0,
     });
@@ -1726,7 +1724,7 @@ function buildStadiumFallback() {
     // tribune silhouette as a low torus
     const tribGeo = new THREE.TorusGeometry(FIELD_W * 1.25, 8, 8, 80);
     const tribMat = new THREE.MeshStandardMaterial({
-        color: 0x0d1020,
+        color: 0x080808,
         roughness: 1.0,
         metalness: 0.0,
         flatShading: true,
@@ -1738,7 +1736,7 @@ function buildStadiumFallback() {
     scene.add(tribune);
 
     // four light pylons at the corners
-    const pylonMat = new THREE.MeshStandardMaterial({ color: 0x1a2240, metalness: 0.5, roughness: 0.6 });
+    const pylonMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.5, roughness: 0.6 });
     const pylonGeo = new THREE.CylinderGeometry(0.6, 0.9, 60, 8);
     [
         [ FIELD_W * 0.85,  FIELD_L * 0.95],
