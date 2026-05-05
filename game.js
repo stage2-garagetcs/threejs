@@ -7,7 +7,7 @@
 // the live site is actually serving the latest game.js. If this string
 // doesn't show up in DevTools console after a refresh, the browser /
 // GitHub Pages CDN is still serving an older cached copy.
-const GAME_BUILD = 'v14-shadowmap-off-final (2026-05-05)';
+const GAME_BUILD = 'v20-etihad-rescale (2026-05-05)';
 console.log(`%c[GAME] build: ${GAME_BUILD}`,
     'background:#16a34a;color:#000;font-weight:bold;padding:3px 8px;border-radius:3px');
 
@@ -188,14 +188,19 @@ const STADIUMS = [
         capacity: '53.400',
         mood: 'AVOND',
         silhouette: 'bowl',
-        scaleMul: 0.78,
+        // Etihad's GLB has solar panels on the roof that artificially inflate
+        // the bbox in step-1 auto-fit, leaving the pitch tiny and far away —
+        // hence we were rendering the camera looking at the rooftop in v19.
+        // Shrink scaleMul a lot so the stadium ends up roughly the right
+        // proportion, and pull the camera closer/lower than the default.
+        scaleMul: 0.45,
         colorScale: 0.55,
         offsetY: 0,
         nativePitch: true,
         pitchBrighten: 1.9,
         cutawayFrontZ: null,
         gameplayScale: 1.0,
-        cameraPos: [0, 72, 78],
+        cameraPos: [0, 56, 64],
         cameraLookAt: [0, 0, 0],
         cameraFov: 58,
         cameraCutaway: false,
@@ -1506,6 +1511,7 @@ function buildStadium() {
     const rotateY    = stadium.rotateY    ?? 0;          // radians, useful when pitch is rotated 90°
     const sinkY      = stadium.sinkY      ?? 0;          // lower imports below our gameplay field
     const fieldCutout = stadium.fieldCutout === true;    // hide imported pitch/flat centre meshes
+    const pitchBlur = stadium.pitchBlur ?? 0;            // CSS-blur radius (px) applied to GLB pitch textures
     const cutawayFrontZ = stadium.cutawayFrontZ ?? null; // hide near-side GLB pieces in camera corridor
     const nativePitch = stadium.nativePitch === true;    // use the GLB's own pitch (no dimming)
     const pitchBrighten = stadium.pitchBrighten ?? 1.0;  // extra multiplier on pitch base color
@@ -1695,24 +1701,30 @@ function buildStadium() {
                         console.log(`[pitch-channels] ${stadium.id}:${c.name || 'unnamed'}: lightMap=${!!m.lightMap}(${beforeLM}→0) aoMap=${!!m.aoMap}(${beforeAO}→0) emissive=${beforeEM}→0`);
                     }
 
-                    // Dark-lift on the diffuse map for the same flat-low set.
-                    // The function gates internally on green-dominance, so non-
-                    // grass textures are skipped. Combined with the lightMap
-                    // zeroing above, this clears both possible homes of baked
-                    // shadow shapes.
-                    if (isPitchLike && m.map && !_processedMaps.has(m.map)) {
+                    // v15: REPLACE the diffuse map outright with our procedural
+                    // stripe texture. Pixel-level dark-lift (v9) and spatial
+                    // blob-killing (v11) both failed because the airplane
+                    // silhouettes baked into Old Trafford's GLB pitch share
+                    // the exact dark-green colour of the natural mowing
+                    // stripes — no colour, channel, or shape filter could
+                    // separate them. Replacing the entire map is the only
+                    // remaining option that's guaranteed to remove them.
+                    // Heavy gaussian blur on the pitch's diffuse texture.
+                    // This smears the baked airplane-shaped shadows into the
+                    // surrounding grass without breaking the GLB's per-mesh
+                    // UV mapping (which is what wrecked v15's stripe replace).
+                    // Mowing stripes are large continuous bands so they
+                    // soften but stay readable; airplane silhouettes are
+                    // bordered on all sides by green grass and dissolve into
+                    // it under enough blur radius.
+                    if (isPitchLike && pitchBlur > 0 && m.map && !_processedMaps.has(m.map)) {
                         _processedMaps.add(m.map);
-                        const liftThresh = stadium.pitchDarkThreshold ?? 110;
-                        const liftAmt    = stadium.pitchDarkLift      ?? 1.0;
-                        const cleaned = liftDarkPatchesTexture(
-                            m.map, liftThresh, liftAmt,
-                            `${stadium.id}:${c.name || 'unnamed'}`
-                        );
-                        if (cleaned) {
-                            _processedMaps.add(cleaned);
-                            m.map = cleaned;
+                        const blurred = blurPitchTexture(m.map, pitchBlur, `${stadium.id}:${c.name || 'unnamed'}`);
+                        if (blurred) {
+                            _processedMaps.add(blurred);
+                            m.map = blurred;
+                            m.needsUpdate = true;
                         }
-                        m.needsUpdate = true;
                     }
 
                     if (isPitchLike) return;
@@ -1885,6 +1897,46 @@ function classifyOverlayTexture(srcTex, label) {
     const isShadowDecal = !isGreenDom && darkPct > 0.02 && darkPct < 0.6;
     console.log(`[overlay] ${label}: avgRGB(${avgR|0},${avgG|0},${avgB|0}) greenLead=${greenLead.toFixed(0)} green=${isGreenDom} lum=${visAvgLum.toFixed(0)} dark=${(darkPct*100).toFixed(1)}% bright=${(brightPct*100).toFixed(1)}% → shadowDecal=${isShadowDecal}`);
     return { ok: true, isShadowDecal, isGreenDom, visAvgLum, visiblePct, darkPct, brightPct };
+}
+
+// Returns a fresh CanvasTexture that is the source texture passed through a
+// canvas blur(Npx) filter. Used to smear baked dark "airplane" shapes into
+// the surrounding grass while leaving the GLB's UV transform intact.
+function blurPitchTexture(srcTex, radiusPx, label) {
+    const img = srcTex && srcTex.image;
+    if (!img || !img.width || !img.height) return null;
+    const w = img.width, h = img.height;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    try {
+        // Three passes of the canvas filter approximate a stronger gaussian,
+        // which is what we need to fully dissolve the airplane silhouettes
+        // (a single pass at radius 12 leaves visible "ghost" outlines).
+        ctx.filter = `blur(${radiusPx}px)`;
+        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(c, 0, 0);
+        ctx.drawImage(c, 0, 0);
+        ctx.filter = 'none';
+    } catch (e) {
+        console.warn(`[pitch-blur] ${label}: drawImage/filter failed`, e);
+        return null;
+    }
+    console.log(`[pitch-blur] ${label}: applied blur(${radiusPx}px) ×3 to ${w}×${h} texture`);
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = srcTex.wrapS;
+    tex.wrapT = srcTex.wrapT;
+    if (srcTex.repeat) tex.repeat.copy(srcTex.repeat);
+    if (srcTex.offset) tex.offset.copy(srcTex.offset);
+    if (srcTex.center && tex.center) tex.center.copy(srcTex.center);
+    tex.rotation = srcTex.rotation || 0;
+    tex.encoding = srcTex.encoding;
+    tex.flipY = srcTex.flipY;
+    tex.anisotropy = srcTex.anisotropy;
+    tex.minFilter = srcTex.minFilter;
+    tex.magFilter = srcTex.magFilter;
+    tex.needsUpdate = true;
+    return tex;
 }
 
 // One-shot CPU pixel pass on the pitch's diffuse texture: any pixel whose
