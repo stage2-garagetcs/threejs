@@ -3,6 +3,14 @@
 // Local 2-player football game
 // =====================================================
 
+// Cache-bust marker: bump GAME_BUILD on every change so we can verify
+// the live site is actually serving the latest game.js. If this string
+// doesn't show up in DevTools console after a refresh, the browser /
+// GitHub Pages CDN is still serving an older cached copy.
+const GAME_BUILD = 'v14-shadowmap-off-final (2026-05-05)';
+console.log(`%c[GAME] build: ${GAME_BUILD}`,
+    'background:#16a34a;color:#000;font-weight:bold;padding:3px 8px;border-radius:3px');
+
 // ----------- state -----------
 const STATE = {
     screen: 'loading',         // loading | launch | setup | coin | playing | over
@@ -233,8 +241,12 @@ function gotoScreen(target, { replace = false } = {}) {
     STATE.screen = target;
     showScreen(SCREEN_TO_DOM[target] || (target + '-screen'));
     const stateObj = { screen: target };
-    if (replace) history.replaceState(stateObj, '');
-    else         history.pushState(stateObj, '');
+    // Explicitly pass the path-without-hash so Chrome strips an existing
+    // '#launch' / '#game' fragment instead of preserving it (the empty-string
+    // shortcut keeps the base URL's fragment).
+    const cleanUrl = location.pathname + location.search;
+    if (replace) history.replaceState(stateObj, '', cleanUrl);
+    else         history.pushState(stateObj, '', cleanUrl);
 }
 
 function navigateToFromPopState(target) {
@@ -268,8 +280,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 2200);
 
-    // initial history entry so popstate has somewhere to land
-    history.replaceState({ screen: 'loading' }, '', '');
+    // initial history entry so popstate has somewhere to land — also actively
+    // strips any '#launch' / '#game' fragment the user may have arrived with
+    // (bookmark, hand-typed URL, or the previous hash-based version of the app).
+    history.replaceState({ screen: 'loading' }, '', location.pathname + location.search);
 
     // browser back / forward → navigate to the recorded screen
     window.addEventListener('popstate', (e) => {
@@ -1138,8 +1152,13 @@ function initThree() {
         // cap pixel ratio harder — Retina at 2× quadruples GPU work for marginal gain
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        // Real-time shadows are intentionally OFF. With them on, the corner
+        // spotlight projects player + stadium-mesh silhouettes onto the pitch
+        // at a low angle, and from the gameplay camera those projections read
+        // as fighter-jet outlines on the grass (verified empirically: turning
+        // shadowMap on/off flips them on/off). We compensate with a flat dark
+        // round shadow blob mounted under each player in makePlayer().
+        renderer.shadowMap.enabled = false;
         renderer.outputEncoding = THREE.sRGBEncoding;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1.05;
@@ -1550,9 +1569,61 @@ function buildStadium() {
                 arena.position.multiplyScalar(gameplayScale);
             }
 
+            // CRITICAL: refresh world matrices before any setFromObject() call
+            // in the traverse. We just changed arena.position above, and without
+            // this every Box3 we compute uses stale matrixWorld -> meshes appear
+            // at the wrong y/x/z and fail the "low/flat/near-pitch" predicates.
+            arena.updateMatrixWorld(true);
+
+            let _pitchMeshHits = 0;
+            const _flatLowMeshes = [];
+            const _allMeshes = [];
+            // Shared across the traverse so we don't dark-lift the same diffuse
+            // texture twice when multiple meshes share a material.
+            const _processedMaps = new WeakSet();
             arena.traverse((c) => {
                 if (!c.isMesh) return;
                 const isPitchMesh = looksLikePitchMesh(c);
+                if (isPitchMesh) _pitchMeshHits++;
+                // collect every flat-low candidate so we can report what we
+                // saw if the dark-lift didn't fire on the right mesh, AND so
+                // we know which meshes to apply the (safe, green-gated) lift to
+                let isFlatLowCandidate = false;
+                if (nativePitch) {
+                    const b = new THREE.Box3().setFromObject(c);
+                    if (!b.isEmpty()) {
+                        const sz = b.getSize(new THREE.Vector3());
+                        const hasMap = !!(c.material && (Array.isArray(c.material) ? c.material[0]?.map : c.material.map));
+                        // log every mesh with a diffuse map so if detection still
+                        // fails we can pick the pitch out by hand from the dump
+                        if (hasMap) {
+                            _allMeshes.push({
+                                name: c.name || '(unnamed)',
+                                size: { x: +sz.x.toFixed(2), y: +sz.y.toFixed(2), z: +sz.z.toFixed(2) },
+                                yMin: +b.min.y.toFixed(2),
+                                yMax: +b.max.y.toFixed(2),
+                                xCenter: +((b.min.x + b.max.x) / 2).toFixed(2),
+                                zCenter: +((b.min.z + b.max.z) / 2).toFixed(2),
+                                isPitchMesh,
+                            });
+                        }
+                        // Generous flat-low gate: we'd rather catch too much
+                        // (the green-dominance gate inside dark-lift will skip
+                        // non-grass textures anyway) than miss the actual pitch
+                        // because of a slightly weird centering.
+                        if (sz.y < 8 && b.min.y < 30 && Math.max(sz.x, sz.z) > FIELD_W * 0.18) {
+                            isFlatLowCandidate = true;
+                            _flatLowMeshes.push({
+                                name: c.name || '(unnamed)',
+                                isPitchMesh,
+                                size: { x: +sz.x.toFixed(2), y: +sz.y.toFixed(2), z: +sz.z.toFixed(2) },
+                                yMin: +b.min.y.toFixed(2),
+                                hasMap,
+                                transparent: Array.isArray(c.material) ? c.material[0]?.transparent : c.material?.transparent,
+                            });
+                        }
+                    }
+                }
 
                 // hide unwanted meshes:
                 //  - if fieldCutout is on (legacy: replace GLB pitch with our own)
@@ -1566,6 +1637,26 @@ function buildStadium() {
                     c.visible = false;
                     return;
                 }
+
+                // Shadow-decal detection: a flat-low mesh whose texture has
+                // both clearly-dark patches AND clearly-bright background is
+                // the airplane/roof overlay (works whether the mesh is
+                // transparent OR opaque — Old Trafford's airplane mesh is
+                // opaque with a sand-colored BG, and was previously skipped by
+                // the transparency-only check). Real grass meshes are mid-
+                // luminance everywhere → they fail this signature → preserved.
+                if (nativePitch && isFlatLowCandidate) {
+                    const matRef = Array.isArray(c.material) ? c.material[0] : c.material;
+                    if (matRef && matRef.map) {
+                        const cls = classifyOverlayTexture(matRef.map, `${stadium.id}:${c.name || 'unnamed'}`);
+                        if (cls.ok && cls.isShadowDecal) {
+                            console.log(`[overlay] HIDING shadow-decal mesh "${c.name || 'unnamed'}"`);
+                            c.visible = false;
+                            return;
+                        }
+                    }
+                }
+
                 c.receiveShadow = true;
                 c.castShadow = false;
                 if (!c.material) return;
@@ -1576,27 +1667,74 @@ function buildStadium() {
                     if (m.emissive && m.emissiveIntensity > 1) m.emissiveIntensity = 0.4;
                     if (m.metalness !== undefined) m.metalness = Math.min(0.4, m.metalness);
 
-                    // when the imported pitch IS the gameplay surface, keep it
-                    // bright (skip the night-tint dimming that's meant for the
-                    // stands) and optionally boost it a little so the grass pops.
-                    if (nativePitch && isPitchMesh) {
+                    const isOfficialPitch = nativePitch && isPitchMesh;
+                    // Treat ANY flat-low candidate as a pitch material for the
+                    // "kill baked daylight shadows" pass. The strict
+                    // looksLikePitchMesh test misses Old Trafford's pitch (0
+                    // hits in console), so the lightmap + AO + emissive zeros
+                    // never fired and roof-shadow silhouettes survived. This
+                    // bypass guarantees the channels get switched off on the
+                    // actual grass mesh, regardless of how oddly it's shaped.
+                    const isPitchLike = isOfficialPitch || (nativePitch && isFlatLowCandidate);
+
+                    if (isPitchLike) {
                         if (pitchBrighten !== 1.0 && m.color) m.color.multiplyScalar(pitchBrighten);
                         m.roughness = Math.max(0.85, m.roughness ?? 1);
-                        // kill baked-in daylight shadows (lightmap + AO) so floodlight
-                        // tower silhouettes from the original render don't show up
-                        // as dark patches on our night-time pitch
+                        // kill baked-in daylight shadows (lightmap + AO + emissive)
+                        // — this is what was missing for Old Trafford. Roof &
+                        // catwalk shadows are typically baked into the lightmap
+                        // channel of the pitch material, NOT the diffuse map, so
+                        // no amount of pixel-tweaking on m.map could remove them.
+                        const beforeLM = m.lightMapIntensity;
+                        const beforeAO = m.aoMapIntensity;
+                        const beforeEM = m.emissiveIntensity;
                         if (m.lightMap) m.lightMapIntensity = 0;
                         if (m.aoMap) m.aoMapIntensity = 0;
                         if (m.emissive) m.emissiveIntensity = 0;
                         m.needsUpdate = true;
-                        return;
+                        console.log(`[pitch-channels] ${stadium.id}:${c.name || 'unnamed'}: lightMap=${!!m.lightMap}(${beforeLM}→0) aoMap=${!!m.aoMap}(${beforeAO}→0) emissive=${beforeEM}→0`);
                     }
+
+                    // Dark-lift on the diffuse map for the same flat-low set.
+                    // The function gates internally on green-dominance, so non-
+                    // grass textures are skipped. Combined with the lightMap
+                    // zeroing above, this clears both possible homes of baked
+                    // shadow shapes.
+                    if (isPitchLike && m.map && !_processedMaps.has(m.map)) {
+                        _processedMaps.add(m.map);
+                        const liftThresh = stadium.pitchDarkThreshold ?? 110;
+                        const liftAmt    = stadium.pitchDarkLift      ?? 1.0;
+                        const cleaned = liftDarkPatchesTexture(
+                            m.map, liftThresh, liftAmt,
+                            `${stadium.id}:${c.name || 'unnamed'}`
+                        );
+                        if (cleaned) {
+                            _processedMaps.add(cleaned);
+                            m.map = cleaned;
+                        }
+                        m.needsUpdate = true;
+                    }
+
+                    if (isPitchLike) return;
 
                     // dim stands / roof / signage to match our night atmosphere
                     if (m.emissive && colorScale < 1) m.emissive.multiplyScalar(colorScale);
                     if (colorScale < 1 && m.color) m.color.multiplyScalar(colorScale);
                 });
             });
+
+            if (nativePitch) {
+                console.log(`[pitch] ${stadium.id}: ${_pitchMeshHits} mesh(es) passed looksLikePitchMesh(), ${_flatLowMeshes.length} flat-low candidate(s), ${_allMeshes.length} mesh(es) with diffuse map`);
+                if (_flatLowMeshes.length) {
+                    console.log(`[pitch] ${stadium.id}: flat-low candidates:`, _flatLowMeshes);
+                }
+                if (_allMeshes.length) {
+                    // sort by area (x*z) descending — pitch is typically among the
+                    // largest mapped meshes, so it'll be near the top of this list
+                    _allMeshes.sort((a, b) => (b.size.x * b.size.z) - (a.size.x * a.size.z));
+                    console.log(`[pitch] ${stadium.id}: top 12 mapped meshes by footprint:`, _allMeshes.slice(0, 12));
+                }
+            }
 
             arena.userData.tag = 'stadium';
             scene.add(arena);
@@ -1688,6 +1826,161 @@ function findGLBPitchBox(arena) {
 // a pitch).  Used both to hide the import-pitch when we want our procedural
 // rectangle, and to keep the import-pitch bright when we use it as the
 // gameplay surface.  Assumes the GLB is already recentered around the origin.
+// Inspects the diffuse texture of a flat-low candidate to decide whether it
+// is a "shadow decal" — a plane sitting on/above the pitch with dark
+// airplane/roof-shadow shapes painted on a brighter background. Works for
+// both alpha-blended decals AND opaque meshes whose texture has the same
+// signature (Old Trafford's airplane mesh is opaque with avg RGB
+// (170, 175, 119) — bright sand background, dark airplane silhouettes).
+//
+// Heuristic: a shadow-decal texture has BOTH a substantial dark-pixel
+// population (the airplanes themselves) AND a substantial bright-pixel
+// population (the surrounding background). Genuine grass textures have
+// neither — they're mid-luminance. Line-marking decals have bright pixels
+// but few dark ones, so they survive.
+function classifyOverlayTexture(srcTex, label) {
+    const img = srcTex && srcTex.image;
+    if (!img || !img.width || !img.height) return { ok: false };
+    const w = img.width, h = img.height;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    try { ctx.drawImage(img, 0, 0); } catch { return { ok: false }; }
+    let id;
+    try { id = ctx.getImageData(0, 0, w, h); } catch { return { ok: false }; }
+    const data = id.data;
+    const stepX = Math.max(1, (w / 64) | 0);
+    const stepY = Math.max(1, (h / 64) | 0);
+    let visSum = 0, visCount = 0, totalCount = 0, darkCount = 0, brightCount = 0;
+    let sumR = 0, sumG = 0, sumB = 0;
+    for (let y = 0; y < h; y += stepY) {
+        for (let x = 0; x < w; x += stepX) {
+            const i = (y * w + x) * 4;
+            totalCount++;
+            if (data[i + 3] < 128) continue;
+            const r = data[i], g = data[i + 1], b = data[i + 2];
+            sumR += r; sumG += g; sumB += b;
+            const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            visSum += lum;
+            visCount++;
+            if (lum < 60) darkCount++;
+            else if (lum > 170) brightCount++;
+        }
+    }
+    const visiblePct = visCount / totalCount;
+    const visAvgLum = visCount ? visSum / visCount : 0;
+    const darkPct   = visCount ? darkCount   / visCount : 0;
+    const brightPct = visCount ? brightCount / visCount : 0;
+    const avgR = visCount ? sumR / visCount : 0;
+    const avgG = visCount ? sumG / visCount : 0;
+    const avgB = visCount ? sumB / visCount : 0;
+    const greenLead = avgG - Math.max(avgR, avgB);
+    const isGreenDom = greenLead > 8 && avgG > 25 && avgG < 200;
+
+    // Shadow-decal signature: NOT green-dominant (so it's not a grass mesh)
+    // AND has a meaningful population of dark pixels (the silhouettes). Real
+    // grass meshes have green-dominant averages → preserved + dark-lifted.
+    // Pure-bright meshes (line-marking decals) have darkPct near zero →
+    // preserved untouched.
+    const isShadowDecal = !isGreenDom && darkPct > 0.02 && darkPct < 0.6;
+    console.log(`[overlay] ${label}: avgRGB(${avgR|0},${avgG|0},${avgB|0}) greenLead=${greenLead.toFixed(0)} green=${isGreenDom} lum=${visAvgLum.toFixed(0)} dark=${(darkPct*100).toFixed(1)}% bright=${(brightPct*100).toFixed(1)}% → shadowDecal=${isShadowDecal}`);
+    return { ok: true, isShadowDecal, isGreenDom, visAvgLum, visiblePct, darkPct, brightPct };
+}
+
+// One-shot CPU pixel pass on the pitch's diffuse texture: any pixel whose
+// brightest channel is below `threshold` (0-255) is blended toward grass-green
+// by `lift` (0-1). Used to fade out roof/structure shadow shapes that the
+// stadium GLB had baked into the pitch's base color map at daylight render
+// time. Returns a fresh CanvasTexture the material can swap in for `m.map`,
+// or null if the source image isn't readable yet (e.g. CORS-tainted).
+function liftDarkPatchesTexture(srcTex, threshold, lift, stadiumId) {
+    const img = srcTex && srcTex.image;
+    if (!img || !img.width || !img.height) {
+        console.warn(`[pitch] ${stadiumId}: pitch texture has no readable image yet`, srcTex);
+        return null;
+    }
+    const w = img.width, h = img.height;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    try {
+        ctx.drawImage(img, 0, 0);
+    } catch (e) {
+        console.warn(`[pitch] ${stadiumId}: drawImage failed`, e);
+        return null;
+    }
+    let id;
+    try {
+        id = ctx.getImageData(0, 0, w, h);
+    } catch (e) {
+        console.warn(`[pitch] ${stadiumId}: getImageData failed (CORS?)`, e);
+        return null;
+    }
+    const data = id.data;
+
+    // Quick green-dominance sanity check on a 32×32 grid spanning the whole
+    // texture, so we can safely run dark-lift on *any* flat-low mesh without
+    // wrecking non-grass textures (concrete, wood, signage). If the texture
+    // isn't grass-dominant, bail and leave the original m.map alone.
+    {
+        let sumR = 0, sumG = 0, sumB = 0, samples = 0;
+        const stepX = Math.max(1, (w / 32) | 0);
+        const stepY = Math.max(1, (h / 32) | 0);
+        for (let y = 0; y < h; y += stepY) {
+            for (let x = 0; x < w; x += stepX) {
+                const i = (y * w + x) * 4;
+                sumR += data[i]; sumG += data[i + 1]; sumB += data[i + 2];
+                samples++;
+            }
+        }
+        const avgR = sumR / samples, avgG = sumG / samples, avgB = sumB / samples;
+        const greenLead = avgG - Math.max(avgR, avgB);
+        const isGrass = greenLead > 8 && avgG > 25 && avgG < 200;
+        console.log(`[pitch] ${stadiumId}: avg RGB (${avgR | 0}, ${avgG | 0}, ${avgB | 0}) → grass=${isGrass}`);
+        if (!isGrass) return null;
+    }
+
+    // Conservative chromaticity lift: only gray-dark pixels (achromatic
+    // baked roof shadows) get nudged toward grass. Dark green stripes are
+    // preserved. This is back to the v9 behaviour after v11's blob-killer
+    // turned out to flatten the entire pitch into a uniform dark green
+    // (because the airplane "silhouettes" weren't in the texture at all —
+    // they were real-time player shadows from the corner spotlight).
+    const grass = [40, 76, 30];
+    const grayMaxDelta = 25;
+    let liftedCount = 0, skippedAsGreen = 0;
+    for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        const maxChan = r > g ? (r > b ? r : b) : (g > b ? g : b);
+        if (maxChan >= threshold) continue;
+        const minChan = r < g ? (r < b ? r : b) : (g < b ? g : b);
+        if (maxChan - minChan > grayMaxDelta) { skippedAsGreen++; continue; }
+        const t = 1 - (maxChan / threshold);
+        const a = Math.min(1, t * lift);
+        data[i]     = r + (grass[0] - r) * a;
+        data[i + 1] = g + (grass[1] - g) * a;
+        data[i + 2] = b + (grass[2] - b) * a;
+        liftedCount++;
+    }
+    ctx.putImageData(id, 0, 0);
+    console.log(`[pitch] ${stadiumId}: lifted ${liftedCount} gray-dark pixels, skipped ${skippedAsGreen} chromatic-dark pixels (threshold ${threshold}, lift ${lift})`);
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = srcTex.wrapS;
+    tex.wrapT = srcTex.wrapT;
+    tex.repeat.copy(srcTex.repeat);
+    tex.offset.copy(srcTex.offset);
+    if (srcTex.center && tex.center) tex.center.copy(srcTex.center);
+    tex.rotation = srcTex.rotation || 0;
+    tex.encoding = srcTex.encoding;
+    tex.flipY = srcTex.flipY;
+    tex.anisotropy = srcTex.anisotropy;
+    tex.minFilter = srcTex.minFilter;
+    tex.magFilter = srcTex.magFilter;
+    tex.needsUpdate = true;
+    return tex;
+}
+
 function looksLikePitchMesh(mesh) {
     const box = new THREE.Box3().setFromObject(mesh);
     if (box.isEmpty()) return false;
@@ -1838,7 +2131,11 @@ function makePlayer(color, isKeeper, controlled) {
         bodyMat
     );
     body.position.y = PLAYER_SIZE/2;
-    body.castShadow = true;
+    // No real-time cast shadow — the cylinder + sphere silhouette projected
+    // by the corner spotlight produces an elongated capsule-with-cap shape
+    // that, viewed from the gameplay camera, reads as a fighter-jet outline
+    // on the pitch. We replace it with a simple round dark blob below.
+    body.castShadow = false;
     group.add(body);
 
     const headMat = new THREE.MeshStandardMaterial({ color: COLORS.skin, roughness: 0.6, metalness: 0.05 });
@@ -1847,8 +2144,19 @@ function makePlayer(color, isKeeper, controlled) {
         headMat
     );
     head.position.y = PLAYER_SIZE + PLAYER_SIZE * 0.32;
-    head.castShadow = true;
+    head.castShadow = false;
     group.add(head);
+
+    // Fake under-foot shadow blob — replaces the real cast shadow. Stays
+    // round regardless of camera angle and reads cleanly as a footprint
+    // rather than as an aircraft silhouette.
+    const shadowBlob = new THREE.Mesh(
+        new THREE.CircleGeometry(PLAYER_SIZE * 0.85, 28),
+        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.42, depthWrite: false })
+    );
+    shadowBlob.rotation.x = -Math.PI / 2;
+    shadowBlob.position.y = 0.04;
+    group.add(shadowBlob);
 
     // controlled-player ring under feet
     if (controlled) {
