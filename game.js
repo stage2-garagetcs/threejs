@@ -223,16 +223,18 @@ function showScreen(id) {
 }
 
 // History-API navigation. Each forward call pushes a state so the browser
-// back button can walk back through screens.
+// back button can walk back through screens. We deliberately do NOT change
+// the URL — passing '' to {push,replace}State keeps the URL clean (no
+// '#screen' fragment) while still recording a navigation entry that
+// popstate can read via e.state.screen.
 function gotoScreen(target, { replace = false } = {}) {
     if (STATE.screen === 'playing' && target !== 'playing') teardownGame();
     if (STATE.screen === 'stadium' && target !== 'stadium') { STADIUM_PREVIEW?.detach(); stopTimecode(); }
     STATE.screen = target;
     showScreen(SCREEN_TO_DOM[target] || (target + '-screen'));
     const stateObj = { screen: target };
-    const url = '#' + target;
-    if (replace) history.replaceState(stateObj, '', url);
-    else         history.pushState(stateObj, '', url);
+    if (replace) history.replaceState(stateObj, '');
+    else         history.pushState(stateObj, '');
 }
 
 function navigateToFromPopState(target) {
