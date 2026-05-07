@@ -7,7 +7,7 @@
 // the live site is actually serving the latest game.js. If this string
 // doesn't show up in DevTools console after a refresh, the browser /
 // GitHub Pages CDN is still serving an older cached copy.
-const GAME_BUILD = 'v41-aftrap-clean-light-green (2026-05-07)';
+const GAME_BUILD = 'v45-tighter-z-bounds-22 (2026-05-07)';
 console.log(`%c[GAME] build: ${GAME_BUILD}`,
     'background:#16a34a;color:#000;font-weight:bold;padding:3px 8px;border-radius:3px');
 
@@ -53,6 +53,17 @@ const GOAL_W = 22;
 const GOAL_H = 10;
 const PLAYER_SIZE = 3.4;
 const BALL_SIZE = 1.05;
+
+// v42/v44 — playable area voor field players is veel strakker dan
+// FIELD_W × FIELD_L. Bij Etihad zit het zichtbare doel-gebied (in de
+// GLB gebakken) duidelijk binnen de pitch-bounding-box, en de gebruiker
+// wil dat de veldspeler stopt waar het doel zichtbaar is — niet door-
+// loopt naar de hoek van het zichtbare gras (zie 7.png — rode poppetje
+// = de stop-positie). Keeper-clamps blijven op FIELD_W/2 (zij wonen
+// per definitie op de doellijn) en ball-scoring blijft op FIELD_W/2.
+const PLAY_BOUND_X = 30;               // ±30 (was ±50.6)
+const PLAY_BOUND_Z = 22;               // ±22 (was ±32.2) — speler stond op de
+                                       // tribune voorbij de zijlijn (zie 8.png)
 
 // ----------- stadium catalog -----------
 // Voeg je eigen stadions toe: drop een .glb in media/stadiums/ (of media/models/),
@@ -213,10 +224,11 @@ const STADIUMS = [
         gameplayScale: 1.0,
         // visualPlayerScale fixes a structural mismatch:
         // PLAYER_SIZE (3.4) / FIELD_W (110) = 3.1%, but real FIFA-broadcast
-        // ratio (3.png) is ~1.5%. Scaling the player GROUP visually (mesh
-        // transforms only, geen gameplay/collision change) brengt de
-        // on-screen ratio in de 3.png-buurt: 0.55 × 3.1% ≈ 1.7%.
-        visualPlayerScale: 0.55,
+        // ratio (3.png) is ~1.5%.
+        // v43 — 0.55 → 0.42: gebruiker vond figuren nog te groot. 0.42 ×
+        // 3.1% = 1.3% — net iets onder de echte broadcast-ratio, voelt
+        // beter met de strakke FOV 48 / 70-units afstand.
+        visualPlayerScale: 0.42,
         // 90° rotatie — DE belangrijkste fix.  De Etihad GLB heeft zijn
         // pitch met de lange as langs z (doel-tot-doel = z), korte langs x.
         // Onze gameplay verwacht het omgekeerd (FIELD_W langs x, FIELD_L
@@ -240,9 +252,12 @@ const STADIUMS = [
         // dakrim die in 7.png/8.png nog boven "CITY" zichtbaar was uit het
         // bovenste gedeelte van de frame valt. CITY-mozaïek blijft volledig
         // in beeld (dakrim zit hoger dan de top van de tribune).
+        // v42 — FOV 42 → 48 (iets wider) zodat de keepers op x=±50 niet meer
+        // op de hoek-randen van het frame staan. Cost: ietsje meer tribune
+        // links/rechts maar nog steeds duidelijk telephoto-feel.
         cameraPos: [3, 25, 70],
         cameraLookAt: [0, -4, 0],
-        cameraFov: 42,
+        cameraFov: 48,
         cameraCutaway: true,
         farSideOverhangCutaway: true,
     },
@@ -2552,11 +2567,14 @@ function buildPlayers() {
     const isCpu = STATE.mode === 'cpu';
 
     // RED team
+    // v43 — keepers staan nu 14 units van de doellijn i.p.v. 5, zodat ze
+    // duidelijker in beeld zitten (waren te dicht op de hoek-rand van het
+    // FOV bij Etihad).
     const redKeeper = makePlayer(COLORS.team1, true, false);
-    redKeeper.position.set(-FIELD_W/2 + 5, 0, 0);
+    redKeeper.position.set(-FIELD_W/2 + 14, 0, 0);
     redKeeper.team = 1;
     redKeeper.isKeeper = true;
-    redKeeper.homePosition = { x: -FIELD_W/2 + 5, z: 0 };
+    redKeeper.homePosition = { x: -FIELD_W/2 + 14, z: 0 };
     applyScale(redKeeper);
     scene.add(redKeeper);
     team1Players.push(redKeeper);
@@ -2575,10 +2593,10 @@ function buildPlayers() {
 
     // BLUE team
     const blueKeeper = makePlayer(COLORS.team2, true, false);
-    blueKeeper.position.set(FIELD_W/2 - 5, 0, 0);
+    blueKeeper.position.set(FIELD_W/2 - 14, 0, 0);
     blueKeeper.team = 2;
     blueKeeper.isKeeper = true;
-    blueKeeper.homePosition = { x: FIELD_W/2 - 5, z: 0 };
+    blueKeeper.homePosition = { x: FIELD_W/2 - 14, z: 0 };
     applyScale(blueKeeper);
     scene.add(blueKeeper);
     team2Players.push(blueKeeper);
@@ -2636,9 +2654,9 @@ function positionForKickoff() {
         p.userData.shootHeld = false;
     });
 
-    // home positions
-    team1Players[0].position.set(-FIELD_W/2 + 5, 0, 0);   // red keeper
-    team2Players[0].position.set( FIELD_W/2 - 5, 0, 0);   // blue keeper
+    // home positions (keepers 14 units inward from goal line — v43)
+    team1Players[0].position.set(-FIELD_W/2 + 14, 0, 0);   // red keeper
+    team2Players[0].position.set( FIELD_W/2 - 14, 0, 0);   // blue keeper
 
     if (STATE.kickoffTeam === 1) {
         team1Players[1].position.set(-3, 0, 0);
@@ -2895,11 +2913,15 @@ function separatePlayers() {
             b.position.x -= nx * overlap * (bShove * 2);
             b.position.z -= nz * overlap * (bShove * 2);
 
-            // clamp both to pitch bounds
-            a.position.x = Math.max(-FIELD_W/2 + PLAYER_SIZE/2, Math.min(FIELD_W/2 - PLAYER_SIZE/2, a.position.x));
-            a.position.z = Math.max(-FIELD_L/2 + PLAYER_SIZE/2, Math.min(FIELD_L/2 - PLAYER_SIZE/2, a.position.z));
-            b.position.x = Math.max(-FIELD_W/2 + PLAYER_SIZE/2, Math.min(FIELD_W/2 - PLAYER_SIZE/2, b.position.x));
-            b.position.z = Math.max(-FIELD_L/2 + PLAYER_SIZE/2, Math.min(FIELD_L/2 - PLAYER_SIZE/2, b.position.z));
+            // clamp both to pitch bounds (keeper exempt — they belong on the goal line)
+            const aBoundX = aIsKeeper ? FIELD_W/2 : PLAY_BOUND_X;
+            const aBoundZ = aIsKeeper ? FIELD_L/2 : PLAY_BOUND_Z;
+            const bBoundX = bIsKeeper ? FIELD_W/2 : PLAY_BOUND_X;
+            const bBoundZ = bIsKeeper ? FIELD_L/2 : PLAY_BOUND_Z;
+            a.position.x = Math.max(-aBoundX + PLAYER_SIZE/2, Math.min(aBoundX - PLAYER_SIZE/2, a.position.x));
+            a.position.z = Math.max(-aBoundZ + PLAYER_SIZE/2, Math.min(aBoundZ - PLAYER_SIZE/2, a.position.z));
+            b.position.x = Math.max(-bBoundX + PLAYER_SIZE/2, Math.min(bBoundX - PLAYER_SIZE/2, b.position.x));
+            b.position.z = Math.max(-bBoundZ + PLAYER_SIZE/2, Math.min(bBoundZ - PLAYER_SIZE/2, b.position.z));
         }
     }
 }
@@ -2959,9 +2981,13 @@ function movePlayer(player, k) {
     player.position.x += mx;
     player.position.z += mz;
 
-    // pitch bounds
-    player.position.x = Math.max(-FIELD_W/2 + PLAYER_SIZE/2, Math.min(FIELD_W/2 - PLAYER_SIZE/2, player.position.x));
-    player.position.z = Math.max(-FIELD_L/2 + PLAYER_SIZE/2, Math.min(FIELD_L/2 - PLAYER_SIZE/2, player.position.z));
+    // pitch bounds — field players use shrunken PLAY_BOUND area; keepers
+    // are clamped separately to their goal-box later.
+    const isKeeper = !!player.isKeeper;
+    const bX = isKeeper ? FIELD_W/2 : PLAY_BOUND_X;
+    const bZ = isKeeper ? FIELD_L/2 : PLAY_BOUND_Z;
+    player.position.x = Math.max(-bX + PLAYER_SIZE/2, Math.min(bX - PLAYER_SIZE/2, player.position.x));
+    player.position.z = Math.max(-bZ + PLAYER_SIZE/2, Math.min(bZ - PLAYER_SIZE/2, player.position.z));
 }
 
 // charge-shot tuning
@@ -3145,9 +3171,11 @@ function updateKeeper(k) {
     k.position.x += (targetX - k.position.x) * 0.05;
     k.position.z += (targetZ - k.position.z) * 0.07;
 
-    // hard clamp: keeper never leaves a small box around its goal
-    const boxMinX = isTeam1 ? -FIELD_W/2 : FIELD_W/2 - 8;
-    const boxMaxX = isTeam1 ? -FIELD_W/2 + 8 : FIELD_W/2;
+    // hard clamp: keeper never leaves a small box around its goal.
+    // v43 — box is 18 units wide (was 8) zodat de keeper ruimte heeft
+    // rondom zijn nieuwe inwaartse home position (FIELD_W/2 ± 14).
+    const boxMinX = isTeam1 ? -FIELD_W/2 : FIELD_W/2 - 18;
+    const boxMaxX = isTeam1 ? -FIELD_W/2 + 18 : FIELD_W/2;
     k.position.x = Math.max(boxMinX, Math.min(boxMaxX, k.position.x));
     k.position.z = Math.max(-GOAL_W/2 + 0.5, Math.min(GOAL_W/2 - 0.5, k.position.z));
 
@@ -3321,9 +3349,9 @@ function updateBotFieldPlayer(p) {
         p.position.z += mz;
     }
 
-    // pitch bounds
-    p.position.x = Math.max(-FIELD_W/2 + PLAYER_SIZE/2, Math.min(FIELD_W/2 - PLAYER_SIZE/2, p.position.x));
-    p.position.z = Math.max(-FIELD_L/2 + PLAYER_SIZE/2, Math.min(FIELD_L/2 - PLAYER_SIZE/2, p.position.z));
+    // pitch bounds — bot field player uses shrunken PLAY_BOUND area
+    p.position.x = Math.max(-PLAY_BOUND_X + PLAYER_SIZE/2, Math.min(PLAY_BOUND_X - PLAYER_SIZE/2, p.position.x));
+    p.position.z = Math.max(-PLAY_BOUND_Z + PLAYER_SIZE/2, Math.min(PLAY_BOUND_Z - PLAYER_SIZE/2, p.position.z));
 
     // sticky-ball follow when CPU has it
     if (haveBall) {
