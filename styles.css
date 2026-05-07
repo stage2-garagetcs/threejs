@@ -1302,6 +1302,23 @@ html, body {
 
 .coin-cta { margin-top: 0.5rem; }
 
+/* ============================================================
+   v41 — AFTRAP-knop (#kickoff-btn): clean lichtgroene pill,
+   géén glow / ring / pulse. Kleur matcht de groene accent op
+   1.png / startscherm.png (naast "BETREED HET STADION").
+   ============================================================ */
+#kickoff-btn .cta-button__inner {
+    background: #3ce06d;             /* lichtgroen, zoals 1.png */
+    color: var(--bg-deep);
+    box-shadow:
+        0 18px 40px -10px rgba(0,0,0,0.6),
+        inset 0 -3px 0 rgba(0,0,0,0.15);
+}
+#kickoff-btn:hover .cta-button__inner {
+    background: #58e884;             /* iets lichter on hover */
+    color: var(--bg-deep);
+}
+
 /* =====================================================
    04 · GAME HUD
    ===================================================== */
@@ -1317,97 +1334,160 @@ html, body {
     z-index: 1;
 }
 
+/* ============================================================
+   v36 — modern broadcast-style scoreboard + compact control HUD.
+   - team color-leader strips on the left/right edges of the panel
+   - team chips become gradient blocks with depth (inset highlight)
+   - sub-labels ("Rood" / "Blauw") and LIVE-status row removed
+   - score is the dominant element, glowing in team accent color
+   - control HUD shrinks to a pill: accent dot + name + key cluster
+     (the long "houd = harder · Q = pass / vraag" hint is removed
+      from the in-game HUD; the launch screen still teaches it)
+   ============================================================ */
 .hud-top {
     position: absolute;
-    top: 24px; left: 50%;
+    top: 22px;
+    left: 50%;
     transform: translateX(-50%);
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    gap: 30px;
-    align-items: center;
-    background: rgba(5,7,18,0.8);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border: 1px solid rgba(243,239,226,0.12);
-    border-radius: 16px;
-    padding: 14px 22px;
+    display: flex;
+    align-items: stretch;
     z-index: 50;
-    min-width: 600px;
-    box-shadow: 0 20px 50px -16px rgba(0,0,0,0.7);
+    background: linear-gradient(180deg,
+        rgba(8, 14, 28, 0.94) 0%,
+        rgba(4, 8, 18, 0.86) 100%);
+    backdrop-filter: blur(22px) saturate(140%);
+    -webkit-backdrop-filter: blur(22px) saturate(140%);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow:
+        0 24px 64px -22px rgba(0,0,0,0.7),
+        0 1px 0 rgba(255,255,255,0.04) inset,
+        0 -1px 0 rgba(0,0,0,0.4) inset;
+    min-width: 480px;
+}
+/* color-leader strips on left + right edges */
+.hud-top::before,
+.hud-top::after {
+    content: "";
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 4px;
+    z-index: 2;
+    pointer-events: none;
+}
+.hud-top::before {
+    left: 0;
+    background: linear-gradient(180deg, var(--red-hot), var(--red));
+    box-shadow: 0 0 18px var(--red-glow);
+}
+.hud-top::after {
+    right: 0;
+    background: linear-gradient(180deg, var(--blue-hot), var(--blue));
+    box-shadow: 0 0 18px var(--blue-glow);
 }
 
 .hud-team {
     display: flex;
     align-items: center;
-    gap: 14px;
-    min-width: 180px;
+    gap: 12px;
+    padding: 14px 22px 14px 24px;
+    min-width: 130px;
+    flex: 1;
 }
-.hud-team--red { justify-content: flex-start; }
-.hud-team--blue { justify-content: flex-end; }
+.hud-team--red  { justify-content: flex-start; }
+.hud-team--blue { justify-content: flex-end; padding: 14px 24px 14px 22px; }
 .hud-team__chip {
-    width: 38px; height: 38px;
-    border-radius: 8px;
+    width: 30px; height: 30px;
+    border-radius: 6px;
     display: grid; place-items: center;
     font-family: var(--f-display);
-    font-size: 1.4rem;
-    color: var(--bg-deep);
+    font-size: 1.05rem;
+    color: #fff;
+    line-height: 1;
+    flex-shrink: 0;
 }
 .hud-team--red .hud-team__chip {
-    background: var(--red);
-    box-shadow: 0 0 18px var(--red-glow);
+    background: linear-gradient(135deg, var(--red-hot), var(--red));
+    box-shadow:
+        0 4px 14px var(--red-glow),
+        inset 0 1px 0 rgba(255,255,255,0.28),
+        inset 0 -1px 0 rgba(0,0,0,0.18);
 }
 .hud-team--blue .hud-team__chip {
-    background: var(--blue);
-    box-shadow: 0 0 18px var(--blue-glow);
+    background: linear-gradient(135deg, var(--blue-hot), var(--blue));
+    box-shadow:
+        0 4px 14px var(--blue-glow),
+        inset 0 1px 0 rgba(255,255,255,0.28),
+        inset 0 -1px 0 rgba(0,0,0,0.18);
 }
 .hud-team__name {
     font-family: var(--f-display);
-    font-size: 1.2rem;
+    font-size: 1.05rem;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.05em;
     line-height: 1;
+    color: var(--ink);
+    white-space: nowrap;
 }
-.hud-team__sub {
-    display: block;
-    font-family: var(--f-mono);
-    font-size: 0.62rem;
-    letter-spacing: 0.3em;
-    color: var(--ink-mute);
-    text-transform: uppercase;
-    margin-top: 4px;
-}
-.hud-team--red .hud-team__name,
-.hud-team--red .hud-team__sub { text-align: left; }
-.hud-team--blue .hud-team__name,
-.hud-team--blue .hud-team__sub { text-align: right; }
+.hud-team--red .hud-team__name { text-align: left; }
+.hud-team--blue .hud-team__name { text-align: right; }
+/* sub-labels ("Rood"/"Blauw") are noise — color does the work */
+.hud-team__sub { display: none; }
 
 .hud-center {
-    display: grid;
-    grid-template-rows: auto auto auto;
-    gap: 4px;
-    place-items: center;
-    padding: 0 14px;
-    border-left: 1px solid rgba(243,239,226,0.12);
-    border-right: 1px solid rgba(243,239,226,0.12);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 22px 10px;
+    gap: 2px;
+    border: none;
+    background:
+        linear-gradient(180deg, rgba(0,0,0,0.28), rgba(0,0,0,0.10)),
+        radial-gradient(120% 100% at 50% 0%, rgba(255,255,255,0.04), transparent 60%);
+    position: relative;
 }
+/* hairlines flanking the center block */
+.hud-center::before,
+.hud-center::after {
+    content: "";
+    position: absolute;
+    top: 16%; bottom: 16%;
+    width: 1px;
+    background: linear-gradient(180deg,
+        transparent,
+        rgba(255,255,255,0.10) 30%,
+        rgba(255,255,255,0.10) 70%,
+        transparent);
+}
+.hud-center::before { left: 0; }
+.hud-center::after  { right: 0; }
+
 .hud-score {
     font-family: var(--f-display);
-    font-size: 2.2rem;
-    line-height: 1;
+    font-size: 2.5rem;
+    line-height: 0.92;
     display: flex;
-    gap: 14px;
-    align-items: center;
+    align-items: baseline;
+    gap: 12px;
+    letter-spacing: 0;
 }
-.hud-score__sep { color: var(--ink-mute); }
-#hud-s1 { color: var(--red); text-shadow: 0 0 14px var(--red-glow); }
-#hud-s2 { color: var(--blue); text-shadow: 0 0 14px var(--blue-glow); }
+.hud-score__sep {
+    color: var(--ink-mute);
+    font-size: 1.3rem;
+    font-weight: 400;
+    transform: translateY(-4px);
+}
+#hud-s1 { color: var(--red-hot);  text-shadow: 0 0 18px var(--red-glow); }
+#hud-s2 { color: var(--blue-hot); text-shadow: 0 0 18px var(--blue-glow); }
 
 .hud-timer {
     font-family: var(--f-mono);
-    font-size: 1rem;
-    color: var(--accent);
-    letter-spacing: 0.1em;
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    letter-spacing: 0.18em;
     font-weight: 700;
+    margin-top: 2px;
 }
 .hud-timer.warning {
     color: var(--red-hot);
@@ -1415,85 +1495,89 @@ html, body {
 }
 @keyframes timer-warn { 50% { opacity: 0.4; } }
 
-.hud-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--f-mono);
-    font-size: 0.6rem;
-    letter-spacing: 0.3em;
-    color: var(--ink-mute);
-    text-transform: uppercase;
-}
-.hud-status::before {
-    content: ""; width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--red);
-    box-shadow: 0 0 8px var(--red);
-    animation: pulse-dot 1.4s ease-in-out infinite;
-}
+/* drop the LIVE status row — too noisy */
+.hud-status { display: none; }
 
+/* === Control HUD — compact pills, no instructional clutter === */
 .hud-controls {
     position: absolute;
-    bottom: 24px; left: 50%;
+    bottom: 22px;
+    left: 50%;
     transform: translateX(-50%);
     display: flex;
-    gap: 24px;
+    gap: 14px;
     z-index: 50;
 }
 .hud-controls__col {
-    display: flex;
+    position: relative;
+    display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 10px 16px;
-    background: rgba(5,7,18,0.8);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
+    gap: 5px;
+    padding: 8px 16px 8px 26px;
+    background: linear-gradient(180deg,
+        rgba(8, 14, 28, 0.92) 0%,
+        rgba(4, 8, 18, 0.80) 100%);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
     border-radius: 999px;
-    border: 1px solid rgba(243,239,226,0.1);
-    border-left-width: 3px;
+    border: none;
+    box-shadow:
+        0 8px 28px -12px rgba(0,0,0,0.7),
+        0 1px 0 rgba(255,255,255,0.06) inset,
+        0 -1px 0 rgba(0,0,0,0.4) inset;
 }
-.hud-controls__col--red  { border-left-color: var(--red); }
-.hud-controls__col--blue { border-left-color: var(--blue); }
+.hud-controls__col::before {
+    content: "";
+    position: absolute;
+    left: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    animation: pulse-dot 1.6s ease-in-out infinite;
+}
+.hud-controls__col--red::before {
+    background: var(--red-hot);
+    box-shadow: 0 0 10px var(--red-glow);
+}
+.hud-controls__col--blue::before {
+    background: var(--blue-hot);
+    box-shadow: 0 0 10px var(--blue-glow);
+}
 .hud-controls__who {
-    font-family: var(--f-display);
-    font-size: 0.95rem;
+    font-family: var(--f-mono);
+    font-size: 0.62rem;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin-right: 6px;
-    padding-right: 10px;
-    border-right: 1px solid rgba(243,239,226,0.18);
+    letter-spacing: 0.22em;
+    margin: 0 8px 0 0;
+    padding: 0;
+    border: none;
+    font-weight: 700;
+    line-height: 1;
 }
 .hud-controls__col--red .hud-controls__who  { color: var(--red-hot); }
 .hud-controls__col--blue .hud-controls__who { color: var(--blue-hot); }
-.hud-controls__plus { color: var(--ink-mute); }
-.hud-controls__or { color: var(--ink-mute); padding: 0 4px; font-family: var(--f-mono); font-size: 0.75rem; }
-.hud-controls__hint {
-    color: var(--ink-mute);
+.hud-controls__plus { color: var(--ink-mute); font-size: 0.7rem; padding: 0 2px; }
+.hud-controls__or   { color: var(--ink-mute); padding: 0 4px; font-family: var(--f-mono); font-size: 0.65rem; }
+/* HIDE the long "houd=harder · Q=pass" hint — too noisy in-game */
+.hud-controls__hint { display: none; }
+/* dot is now the ::before pseudo */
+.hud-controls__cpu-dot { display: none; }
+
+/* tighter, flatter kbd for the in-game HUD */
+.hud-controls kbd {
     font-family: var(--f-mono);
     font-size: 0.62rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    margin-left: 6px;
-    padding-left: 10px;
-    border-left: 1px solid rgba(243,239,226,0.18);
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
+    padding: 3px 6px;
+    min-width: 18px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-bottom: 1px solid rgba(255,255,255,0.18);
+    border-radius: 4px;
+    color: var(--ink);
+    text-align: center;
+    line-height: 1;
 }
-.hud-controls__hint kbd {
-    font-size: 0.55rem;
-    padding: 1px 5px;
-    min-width: 14px;
-    margin: 0 1px;
-}
-.hud-controls__cpu-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--blue-hot);
-    box-shadow: 0 0 10px var(--blue-hot);
-    animation: pulse-dot 1.6s ease-in-out infinite;
-}
-.hud-controls__col--red .hud-controls__cpu-dot { background: var(--red-hot); box-shadow: 0 0 10px var(--red-hot); }
 
 kbd {
     font-family: var(--f-mono);
