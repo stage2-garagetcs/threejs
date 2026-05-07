@@ -7,7 +7,7 @@
 // the live site is actually serving the latest game.js. If this string
 // doesn't show up in DevTools console after a refresh, the browser /
 // GitHub Pages CDN is still serving an older cached copy.
-const GAME_BUILD = 'v31-rotate-glb-90 (2026-05-06)';
+const GAME_BUILD = 'v35-etihad-cam-tilt-down (2026-05-07)';
 console.log(`%c[GAME] build: ${GAME_BUILD}`,
     'background:#16a34a;color:#000;font-weight:bold;padding:3px 8px;border-radius:3px');
 
@@ -201,7 +201,10 @@ const STADIUMS = [
         colorScale: 0.55,
         offsetY: 0,
         nativePitch: true,
-        pitchBrighten: 1.9,
+        // v32: pitchBrighten 1.9 → 2.4 — zelfs met colorScale 0.55 op de stands
+        // bleef het gras te grijs/olijf in 4.png. 3.png heeft levendig groen
+        // gras. 2.4× tilt de baked pitch terug naar saturated FIFA-groen.
+        pitchBrighten: 2.4,
         cutawayFrontZ: FIELD_L / 2 + 2,
         // gameplayScale terug naar 1.0 — boost was nodig in v29/v30 omdat de
         // GLB-pitch verkeerd geörienteerd was; step-2 schaalde verkeerde as
@@ -226,10 +229,22 @@ const STADIUMS = [
         // op z=70 staat nu écht voorbij de sideline → beide doelen
         // zichtbaar aan canvas links/rechts (3.png-stijl).
         rotateY: Math.PI / 2,
-        cameraPos: [0, 25, 70],
-        cameraLookAt: [0, 0, 0],
-        cameraFov: 55,
+        // v32 — FOV 55 → 42 (telephoto). 4.png had te veel tribune in beeld
+        // omdat de wide FOV bij z=70 het hele bowl framet. 3.png is duidelijk
+        // telephoto: pitch vult ~85% van het frame, perspectief is fairly flat
+        // (verre doel niet veel kleiner dan dichtbije speler). FOV 42 zoomt
+        // strak op het veld zonder camera te verplaatsen → de cutaway plane
+        // en pitch-detectie blijven zoals ze waren.
+        // v35 — camera 3 units naar rechts geschoven en lookAt 4 units omlaag
+        // ([0,0,0] → [0,-4,0]) zodat de view ~3° verder kantelt en de bovenste
+        // dakrim die in 7.png/8.png nog boven "CITY" zichtbaar was uit het
+        // bovenste gedeelte van de frame valt. CITY-mozaïek blijft volledig
+        // in beeld (dakrim zit hoger dan de top van de tribune).
+        cameraPos: [3, 25, 70],
+        cameraLookAt: [0, -4, 0],
+        cameraFov: 42,
         cameraCutaway: true,
+        farSideOverhangCutaway: true,
     },
     // ↓ Voeg hier nieuwe stadions toe ↓
 ];
@@ -1731,7 +1746,8 @@ function buildStadium() {
                     (fieldCutout && isPitchMesh) ||
                     shouldHideImportedFrontMesh(c, cutawayFrontZ) ||
                     shouldHideCameraSideMesh(c, stadium) ||
-                    shouldHideImportedUndersideBar(c, stadium)
+                    shouldHideImportedUndersideBar(c, stadium) ||
+                    shouldHideFarSideOverhang(c, stadium)
                 ) {
                     c.visible = false;
                     return;
@@ -2342,6 +2358,54 @@ function shouldHideImportedUndersideBar(mesh, stadium) {
     const onCameraHalf = cameraSide > 0;
 
     return isLongBar && sitsUnderGameplay && onCameraHalf;
+}
+
+// v33/v34 — verberg de far-side dak-overhang/canopy die als grijze
+// horizontale balk over het verre uiteinde van het stadion loopt
+// (zie 5.png / 6.png), én de bovenste dakrim die als ring rond het
+// hele bowl loopt en in 7.png boven het "CITY"-mozaïek hangt.
+//
+// Twee gevallen:
+//   1) Aparte far-side balk:   center.z duidelijk op far-side, dunne y.
+//   2) Ring/wrap mesh:          center.z ≈ 0 (hele bowl) maar extends ver
+//                               op far-side; iets dikkere y toegestaan.
+function shouldHideFarSideOverhang(mesh, stadium) {
+    if (!stadium.farSideOverhangCutaway || !stadium.cameraPos) return false;
+    if (looksLikePitchMesh(mesh)) return false;
+
+    const box = new THREE.Box3().setFromObject(mesh);
+    if (box.isEmpty()) return false;
+
+    const center = box.getCenter(new THREE.Vector3());
+    const size   = box.getSize(new THREE.Vector3());
+    const cam    = new THREE.Vector3(stadium.cameraPos[0], 0, stadium.cameraPos[2]);
+    if (cam.lengthSq() < 1) return false;
+    const dir = cam.normalize();
+    const cameraSide = center.x * dir.x + center.z * dir.z;
+
+    const isLongBar  = Math.max(size.x, size.z) > FIELD_W * 0.55;
+    const isElevated = box.min.y > 18;
+
+    // Geval 1 — aparte far-side overhang (zoals 5.png/6.png balk)
+    const isFarSideBar = cameraSide < -FIELD_L * 0.25 && size.y < 18;
+
+    // Geval 2 — wrap-around dakrim: bbox spant beide kanten van het bowl,
+    // dus center.z ligt rond 0 en faalt de far-side check. Detecteer aan
+    // de extents en sta iets dikkere y toe (een ring is fysiek dikker dan
+    // een platte overhang).
+    const wrapsFarSide = box.min.z < -FIELD_L * 0.45
+        && box.max.z >  FIELD_L * 0.30
+        && size.y < 25;
+
+    const hit = isLongBar && isElevated && (isFarSideBar || wrapsFarSide);
+    if (hit) {
+        console.log(`[far-side-overhang] HIDE "${mesh.name || 'unnamed'}" `
+            + `size=(${size.x.toFixed(1)},${size.y.toFixed(1)},${size.z.toFixed(1)}) `
+            + `min.y=${box.min.y.toFixed(1)} cameraSide=${cameraSide.toFixed(1)} `
+            + `z=[${box.min.z.toFixed(1)}..${box.max.z.toFixed(1)}] `
+            + `wraps=${wrapsFarSide}`);
+    }
+    return hit;
 }
 
 function buildStadiumFallback() {
