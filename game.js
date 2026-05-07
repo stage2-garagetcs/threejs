@@ -1,69 +1,7 @@
 // =====================================================
-// PITCH ROYALE — Stadium Nightfall
-// Local 2-player football game
+// PITCH ROYALE — gameplay + stadium loader + UI bindings
+// (state, palette, field constants → state.js)
 // =====================================================
-
-// Cache-bust marker: bump GAME_BUILD on every change so we can verify
-// the live site is actually serving the latest game.js. If this string
-// doesn't show up in DevTools console after a refresh, the browser /
-// GitHub Pages CDN is still serving an older cached copy.
-const GAME_BUILD = 'v45-tighter-z-bounds-22 (2026-05-07)';
-console.log(`%c[GAME] build: ${GAME_BUILD}`,
-    'background:#16a34a;color:#000;font-weight:bold;padding:3px 8px;border-radius:3px');
-
-// ----------- state -----------
-const STATE = {
-    screen: 'loading',         // loading | launch | setup | coin | playing | over
-    mode: 'duo',               // duo (Hot-Seat) | cpu
-    p1: { name: 'Speler 1', team: 1 },   // team: 1 = red, 2 = blue
-    p2: { name: 'Speler 2', team: 2 },
-    callerSide: 'p1',          // who calls heads/tails
-    kickoffTeam: 1,
-    score1: 0,
-    score2: 0,
-    gameDuration: 90,          // seconds
-    gameStartTime: null,
-    inputLocked: true,         // unlocked after kickoff countdown
-    scoring: false,            // true during the goal-celebration freeze
-    paused: false,             // true while the pause overlay is up
-};
-
-// ----------- in-game color palette (Stadium Nightfall) -----------
-const COLORS = {
-    pitch:        0x0e6a3a,
-    pitchDark:    0x094f29,
-    line:         0xe7e2d2,
-    ground:       0x080a14,
-    team1:        0xe0203a,    // crimson
-    team1Hot:     0xff5b6e,
-    team2:        0x1f5dff,    // cobalt
-    team2Hot:     0x6da4ff,
-    skin:         0xe2c39a,
-    keeperBand:   0xf0c14a,
-    skyTop:       0x000000,
-    skyMid:       0x040406,
-    skyBottom:    0x000000,
-    fogColor:     0x000000,
-};
-
-// ----------- field constants -----------
-const FIELD_W = 110;
-const FIELD_L = 70;
-const GOAL_W = 22;
-const GOAL_H = 10;
-const PLAYER_SIZE = 3.4;
-const BALL_SIZE = 1.05;
-
-// v42/v44 — playable area voor field players is veel strakker dan
-// FIELD_W × FIELD_L. Bij Etihad zit het zichtbare doel-gebied (in de
-// GLB gebakken) duidelijk binnen de pitch-bounding-box, en de gebruiker
-// wil dat de veldspeler stopt waar het doel zichtbaar is — niet door-
-// loopt naar de hoek van het zichtbare gras (zie 7.png — rode poppetje
-// = de stop-positie). Keeper-clamps blijven op FIELD_W/2 (zij wonen
-// per definitie op de doellijn) en ball-scoring blijft op FIELD_W/2.
-const PLAY_BOUND_X = 30;               // ±30 (was ±50.6)
-const PLAY_BOUND_Z = 22;               // ±22 (was ±32.2) — speler stond op de
-                                       // tribune voorbij de zijlijn (zie 8.png)
 
 // ----------- stadium catalog -----------
 // Voeg je eigen stadions toe: drop een .glb in media/stadiums/ (of media/models/),
@@ -260,6 +198,16 @@ const STADIUMS = [
         cameraFov: 48,
         cameraCutaway: true,
         farSideOverhangCutaway: true,
+        // v55 — Etihad GLB heeft geen zichtbare doelen. We tekenen onze
+        // eigen procedurele doelen op de visuele pitch-rand (±42), en
+        // ALLE goal-logica (scoring, bounce, keeper, AI) leest deze
+        // goalLineX zodat de bal bij ±42 scoort i.p.v. doorschiet naar
+        // FIELD_W/2 = ±55 (= op de tribune).
+        // v57 — 42 → 40, doelen 2 units meer naar binnen zodat ze duidelijk
+        // ON het zichtbare groen staan i.p.v. op de run-off-overgang.
+        // Keeper home volgt automatisch: GOAL_LINE_X - 5 = 35.
+        goalLineX: 40,
+        forceProceduralGoals: true,
     },
     // ↓ Voeg hier nieuwe stadions toe ↓
 ];
@@ -1253,6 +1201,10 @@ function initThree() {
     // clear previous scene contents
     while (scene.children.length) scene.remove(scene.children[0]);
 
+    // v55 — sync GOAL_LINE_X met het actieve stadion. Default = FIELD_W/2,
+    // maar GLBs met smaller zichtbaar veld (Etihad) overrulen dit.
+    setGoalLineX(getSelectedStadium()?.goalLineX ?? FIELD_W / 2);
+
     buildSky();
     buildLights();
     buildField();
@@ -1496,15 +1448,21 @@ function buildField() {
 }
 
 function buildGoals() {
-    if (getSelectedStadium()?.nativePitch) return;
+    // v55 — Skip alleen als de GLB zelf zichtbare doelen heeft (nativePitch)
+    // EN het stadion niet expliciet om procedurele doelen vraagt. Etihad
+    // heeft nativePitch (eigen pitch) maar GEEN zichtbare doelen → die
+    // krijgen forceProceduralGoals: true zodat we onze eigen goal-mesh
+    // tekenen op de visuele pitch-rand (GOAL_LINE_X).
+    const stadium = getSelectedStadium();
+    if (stadium?.nativePitch && !stadium?.forceProceduralGoals) return;
 
     const postMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.6, roughness: 0.3 });
     const netMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 });
 
     [-1, 1].forEach(side => {
-        const x = side * FIELD_W / 2;
+        const x = side * GOAL_LINE_X;
         // posts
-        const postGeo = new THREE.CylinderGeometry(0.18, 0.18, GOAL_H, 12);
+        const postGeo = new THREE.CylinderGeometry(0.30, 0.30, GOAL_H, 12);
         const post1 = new THREE.Mesh(postGeo, postMat);
         post1.position.set(x, GOAL_H/2, -GOAL_W/2);
         post1.castShadow = true;
@@ -1516,7 +1474,7 @@ function buildGoals() {
         scene.add(post2);
 
         // crossbar
-        const crossGeo = new THREE.CylinderGeometry(0.18, 0.18, GOAL_W, 12);
+        const crossGeo = new THREE.CylinderGeometry(0.30, 0.30, GOAL_W, 12);
         const cross = new THREE.Mesh(crossGeo, postMat);
         cross.rotation.x = Math.PI / 2;
         cross.position.set(x, GOAL_H, 0);
@@ -1524,9 +1482,45 @@ function buildGoals() {
         scene.add(cross);
 
         // back of goal — net mesh as line grid
-        const depth = 5 * side; // points outward
+        // v59 — net is nu een combinatie van translucent witte vlakken (back,
+        // top, sides) + dichte wireframe-grid. Geeft de massa-feel van een
+        // echt football-net (zie 18.png broadcast referentie) i.p.v. alleen
+        // dunne losse lijnen.
+        const depth = 3 * side; // points outward
         const netGroup = new THREE.Group();
-        const cols = 9, rows = 6;
+
+        // translucent witte panelen — geven het net massa op afstand
+        const panelMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.32,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+        });
+        // back panel (achterkant van het doel)
+        const backGeo = new THREE.PlaneGeometry(GOAL_W, GOAL_H);
+        const backPanel = new THREE.Mesh(backGeo, panelMat);
+        backPanel.position.set(x + depth, GOAL_H / 2, 0);
+        backPanel.rotation.y = Math.PI / 2;
+        netGroup.add(backPanel);
+        // top panel
+        const topGeo = new THREE.PlaneGeometry(Math.abs(depth), GOAL_W);
+        const topPanel = new THREE.Mesh(topGeo, panelMat);
+        topPanel.position.set(x + depth / 2, GOAL_H, 0);
+        topPanel.rotation.x = Math.PI / 2;
+        netGroup.add(topPanel);
+        // left side panel
+        const leftGeo = new THREE.PlaneGeometry(Math.abs(depth), GOAL_H);
+        const leftPanel = new THREE.Mesh(leftGeo, panelMat);
+        leftPanel.position.set(x + depth / 2, GOAL_H / 2, -GOAL_W / 2);
+        netGroup.add(leftPanel);
+        // right side panel
+        const rightPanel = new THREE.Mesh(leftGeo.clone(), panelMat);
+        rightPanel.position.set(x + depth / 2, GOAL_H / 2, GOAL_W / 2);
+        netGroup.add(rightPanel);
+
+        // dichte wireframe-grid bovenop de panelen — geeft echte mesh-look
+        const cols = 14, rows = 9;  // was 9, 6 — nu denser
         for (let i = 0; i <= cols; i++) {
             const t = i / cols;
             const z = -GOAL_W/2 + t * GOAL_W;
@@ -2558,8 +2552,13 @@ function buildPlayers() {
     // pitch ratio (PLAYER_SIZE/FIELD_W = 3.1%) closer to the FIFA-broadcast
     // ratio (~1.5%, see 3.png) — pure cosmetic, gameplay distances unchanged.
     const stadium = getSelectedStadium();
+    // v49 — keepers krijgen 1.4× de field-player scale zodat ze duidelijk
+    // zichtbaar blijven aan de doellijn (gebruiker kon ze niet vinden bij
+    // visualPlayerScale 0.42 — keepers waren ~17px dots aan de rand).
     const visualScale = stadium?.visualPlayerScale ?? 1.0;
-    const applyScale = (g) => { if (visualScale !== 1.0) g.scale.setScalar(visualScale); };
+    const keeperScale = visualScale === 1.0 ? 1.0 : Math.min(1.0, visualScale * 1.4);
+    const applyFieldScale  = (g) => { if (visualScale  !== 1.0) g.scale.setScalar(visualScale); };
+    const applyKeeperScale = (g) => { if (keeperScale !== 1.0) g.scale.setScalar(keeperScale); };
 
     // determine which veldspeler is human-controlled per mode
     // Hot-Seat (duo): both veldspelers are human (P1 + P2)
@@ -2571,11 +2570,11 @@ function buildPlayers() {
     // duidelijker in beeld zitten (waren te dicht op de hoek-rand van het
     // FOV bij Etihad).
     const redKeeper = makePlayer(COLORS.team1, true, false);
-    redKeeper.position.set(-FIELD_W/2 + 14, 0, 0);
+    redKeeper.position.set(-GOAL_LINE_X + 5, 0, 0);
     redKeeper.team = 1;
     redKeeper.isKeeper = true;
-    redKeeper.homePosition = { x: -FIELD_W/2 + 14, z: 0 };
-    applyScale(redKeeper);
+    redKeeper.homePosition = { x: -GOAL_LINE_X + 5, z: 0 };
+    applyKeeperScale(redKeeper);
     scene.add(redKeeper);
     team1Players.push(redKeeper);
 
@@ -2587,17 +2586,17 @@ function buildPlayers() {
     redField.isKeeper = false;
     redField.homePosition = { x: -25, z: 0 };
     redField.userData.isBot = !redIsHuman;
-    applyScale(redField);
+    applyFieldScale(redField);
     scene.add(redField);
     team1Players.push(redField);
 
     // BLUE team
     const blueKeeper = makePlayer(COLORS.team2, true, false);
-    blueKeeper.position.set(FIELD_W/2 - 14, 0, 0);
+    blueKeeper.position.set(GOAL_LINE_X - 5, 0, 0);
     blueKeeper.team = 2;
     blueKeeper.isKeeper = true;
-    blueKeeper.homePosition = { x: FIELD_W/2 - 14, z: 0 };
-    applyScale(blueKeeper);
+    blueKeeper.homePosition = { x: GOAL_LINE_X - 5, z: 0 };
+    applyKeeperScale(blueKeeper);
     scene.add(blueKeeper);
     team2Players.push(blueKeeper);
 
@@ -2608,7 +2607,7 @@ function buildPlayers() {
     blueField.isKeeper = false;
     blueField.homePosition = { x: 25, z: 0 };
     blueField.userData.isBot = !blueIsHuman;
-    applyScale(blueField);
+    applyFieldScale(blueField);
     scene.add(blueField);
     team2Players.push(blueField);
 
@@ -2655,8 +2654,8 @@ function positionForKickoff() {
     });
 
     // home positions (keepers 14 units inward from goal line — v43)
-    team1Players[0].position.set(-FIELD_W/2 + 14, 0, 0);   // red keeper
-    team2Players[0].position.set( FIELD_W/2 - 14, 0, 0);   // blue keeper
+    team1Players[0].position.set(-GOAL_LINE_X + 5, 0, 0);   // red keeper
+    team2Players[0].position.set( GOAL_LINE_X - 5, 0, 0);   // blue keeper
 
     if (STATE.kickoffTeam === 1) {
         team1Players[1].position.set(-3, 0, 0);
@@ -2913,15 +2912,9 @@ function separatePlayers() {
             b.position.x -= nx * overlap * (bShove * 2);
             b.position.z -= nz * overlap * (bShove * 2);
 
-            // clamp both to pitch bounds (keeper exempt — they belong on the goal line)
-            const aBoundX = aIsKeeper ? FIELD_W/2 : PLAY_BOUND_X;
-            const aBoundZ = aIsKeeper ? FIELD_L/2 : PLAY_BOUND_Z;
-            const bBoundX = bIsKeeper ? FIELD_W/2 : PLAY_BOUND_X;
-            const bBoundZ = bIsKeeper ? FIELD_L/2 : PLAY_BOUND_Z;
-            a.position.x = Math.max(-aBoundX + PLAYER_SIZE/2, Math.min(aBoundX - PLAYER_SIZE/2, a.position.x));
-            a.position.z = Math.max(-aBoundZ + PLAYER_SIZE/2, Math.min(aBoundZ - PLAYER_SIZE/2, a.position.z));
-            b.position.x = Math.max(-bBoundX + PLAYER_SIZE/2, Math.min(bBoundX - PLAYER_SIZE/2, b.position.x));
-            b.position.z = Math.max(-bBoundZ + PLAYER_SIZE/2, Math.min(bBoundZ - PLAYER_SIZE/2, b.position.z));
+            // clamp both to pitch bounds (keepers krijgen FIELD_W/L automatisch)
+            clampPlayerToBounds(a);
+            clampPlayerToBounds(b);
         }
     }
 }
@@ -2980,14 +2973,7 @@ function movePlayer(player, k) {
     }
     player.position.x += mx;
     player.position.z += mz;
-
-    // pitch bounds — field players use shrunken PLAY_BOUND area; keepers
-    // are clamped separately to their goal-box later.
-    const isKeeper = !!player.isKeeper;
-    const bX = isKeeper ? FIELD_W/2 : PLAY_BOUND_X;
-    const bZ = isKeeper ? FIELD_L/2 : PLAY_BOUND_Z;
-    player.position.x = Math.max(-bX + PLAYER_SIZE/2, Math.min(bX - PLAYER_SIZE/2, player.position.x));
-    player.position.z = Math.max(-bZ + PLAYER_SIZE/2, Math.min(bZ - PLAYER_SIZE/2, player.position.z));
+    clampPlayerToBounds(player);
 }
 
 // charge-shot tuning
@@ -3048,7 +3034,7 @@ function fireShot(player, power, charge01) {
     const rdist = Math.sqrt(rdx*rdx + rdz*rdz);
     if (rdist > PLAYER_SIZE + BALL_SIZE + 5) return;
 
-    const goalX = player.team === 1 ? FIELD_W/2 : -FIELD_W/2;
+    const goalX = player.team === 1 ? GOAL_LINE_X : -GOAL_LINE_X;
 
     // The shot is ALWAYS directed at the enemy goal — no more sideline kicks.
     // Lateral movement input picks WHICH part of the goal mouth you aim at.
@@ -3142,8 +3128,12 @@ function updateAI() {
 
 function updateKeeper(k) {
     const isTeam1 = k.team === 1;
-    const goalLineX = isTeam1 ? -FIELD_W/2 : FIELD_W/2;
-    const homeX = goalLineX + (isTeam1 ? 4 : -4);    // 4 units in front of the goal line
+    const goalLineX = isTeam1 ? -GOAL_LINE_X : GOAL_LINE_X;
+    // v50 — gebruik de spawn home position (gezet in buildPlayers op
+    // FIELD_W/2 ± 14 = ±41) i.p.v. een hardcoded "goalLineX + 4 = ±51".
+    // Was de oorzaak van de "waar zijn de keepers" bug: ze spawnden op
+    // ±41 maar deze lerp trok ze direct terug naar ±51 → uit het zicht.
+    const homeX = k.homePosition?.x ?? (goalLineX + (isTeam1 ? 4 : -4));
 
     // ball is "threatening" only when it's actually in the keeper's defensive third
     const threatX = isTeam1 ? -FIELD_W * 0.20 : FIELD_W * 0.20;
@@ -3172,10 +3162,11 @@ function updateKeeper(k) {
     k.position.z += (targetZ - k.position.z) * 0.07;
 
     // hard clamp: keeper never leaves a small box around its goal.
-    // v43 — box is 18 units wide (was 8) zodat de keeper ruimte heeft
-    // rondom zijn nieuwe inwaartse home position (FIELD_W/2 ± 14).
-    const boxMinX = isTeam1 ? -FIELD_W/2 : FIELD_W/2 - 18;
-    const boxMaxX = isTeam1 ? -FIELD_W/2 + 18 : FIELD_W/2;
+    // v55 — anchor op GOAL_LINE_X (= 42 voor Etihad, = FIELD_W/2 voor
+    // procedurele arena's). Box 14 wide: roam zone bij Etihad = [28, 42],
+    // bij procedureel = [41, 55]. Keeper home (±37 voor Etihad) inside.
+    const boxMinX = isTeam1 ? -GOAL_LINE_X : GOAL_LINE_X - 14;
+    const boxMaxX = isTeam1 ? -GOAL_LINE_X + 14 : GOAL_LINE_X;
     k.position.x = Math.max(boxMinX, Math.min(boxMaxX, k.position.x));
     k.position.z = Math.max(-GOAL_W/2 + 0.5, Math.min(GOAL_W/2 - 0.5, k.position.z));
 
@@ -3257,7 +3248,7 @@ function updateKeeper(k) {
 function updateBotFieldPlayer(p) {
     if (STATE.inputLocked) return;
 
-    const ownGoalX = p.team === 1 ? -FIELD_W/2 : FIELD_W/2;
+    const ownGoalX = p.team === 1 ? -GOAL_LINE_X : GOAL_LINE_X;
     const enemyGoalX = -ownGoalX;
     const goalSign = p.team === 1 ? 1 : -1;
 
@@ -3350,8 +3341,7 @@ function updateBotFieldPlayer(p) {
     }
 
     // pitch bounds — bot field player uses shrunken PLAY_BOUND area
-    p.position.x = Math.max(-PLAY_BOUND_X + PLAYER_SIZE/2, Math.min(PLAY_BOUND_X - PLAYER_SIZE/2, p.position.x));
-    p.position.z = Math.max(-PLAY_BOUND_Z + PLAYER_SIZE/2, Math.min(PLAY_BOUND_Z - PLAYER_SIZE/2, p.position.z));
+    clampPlayerToBounds(p);
 
     // sticky-ball follow when CPU has it
     if (haveBall) {
@@ -3368,7 +3358,7 @@ function updateBotFieldPlayer(p) {
     }
 
     // decide to shoot when in shooting range
-    const shootRange = (p.team === 1 ? FIELD_W/2 - p.position.x : p.position.x + FIELD_W/2);
+    const shootRange = (p.team === 1 ? GOAL_LINE_X - p.position.x : p.position.x + GOAL_LINE_X);
     if (haveBall && shootRange < 34 && Math.random() < 0.032) {
         const goalX = enemyGoalX;
         const keeper = (p.team === 1 ? team2Players[0] : team1Players[0]);
@@ -3461,13 +3451,13 @@ function updateBall() {
     }
 
     // walls (except goal zones)
-    if (Math.abs(ball.position.x) > FIELD_W/2) {
+    if (Math.abs(ball.position.x) > GOAL_LINE_X) {
         if (Math.abs(ball.position.z) < GOAL_W/2 && ball.position.y < GOAL_H) {
             scoreGoal(ball.position.x > 0 ? 1 : 2);
             return;
         }
         ball.velocity.x *= -0.45;
-        ball.position.x = Math.sign(ball.position.x) * FIELD_W/2;
+        ball.position.x = Math.sign(ball.position.x) * GOAL_LINE_X;
     }
     if (Math.abs(ball.position.z) > FIELD_L/2) {
         ball.velocity.z *= -0.45;
